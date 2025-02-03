@@ -24,10 +24,12 @@ import random
 
 import numpy as np
 import torch
+from skimage.metrics import mean_squared_error
+
 from slim_gsgp.algorithms.GP.representations.tree_utils import (create_full_random_tree,
                                                                 create_grow_random_tree)
 from slim_gsgp.algorithms.GSGP.representations.tree import Tree
-from sklearn.metrics import root_mean_squared_error
+from sklearn.metrics import mean_squared_error
 
 
 def protected_div(x1, x2):
@@ -470,7 +472,11 @@ def gs_rmse(y_true, y_pred):
     float
         The root mean squared error.
     """
-    return root_mean_squared_error(y_true, y_pred[0])
+    return mean_squared_error(y_true, y_pred[0])
+
+
+def root_mean_squared_error(y_true, y_pred):
+    return math.sqrt(mean_squared_error(y_true, y_pred))
 
 
 def gs_size(y_true, y_pred):

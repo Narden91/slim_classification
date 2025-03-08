@@ -90,26 +90,43 @@ def create_graphviz_tree(tree, filename='gp_tree', format='png'):
     return dot
 
 
-def visualize_gp_tree(tree_str, filename='gp_tree', format='png'):
-    """
-    Create a visual representation of a GP tree from its string representation.
+def visualize_gp_tree(tree_structure, filename='gp_tree', format='png'):
+    """Create visualization directly from tree structure instead of parsing strings."""
+    dot = Digraph(comment='GP Tree Visualization')
+    dot.attr('node', shape='box', style='filled')
 
-    Parameters:
-    -----------
-    tree_str : str
-        String representation of the GP tree
-    filename : str
-        Output filename (without extension)
-    format : str
-        Output format ('png', 'svg', 'pdf', etc.)
+    node_count = [0]
 
-    Returns:
-    --------
-    str
-        Path to the generated visualization file
-    """
-    tree = parse_tree_string(tree_str)
-    dot = create_graphviz_tree(tree, filename, format)
+    def add_nodes(node, parent_id=None):
+        if node is None:
+            return None
+
+        current_id = f"node{node_count[0]}"
+        node_count[0] += 1
+
+        if isinstance(node, tuple):  # Function node
+            function_name = node[0]
+            dot.node(current_id, function_name, fillcolor='lightgreen')
+
+            # Add child nodes
+            for child in node[1:]:
+                child_id = add_nodes(child, current_id)
+                if child_id:
+                    dot.edge(current_id, child_id)
+        elif isinstance(node, list):  # Collection of trees
+            dot.node(current_id, 'collection', fillcolor='lightpink')
+
+            for child in node:
+                child_id = add_nodes(child, current_id)
+                if child_id:
+                    dot.edge(current_id, child_id)
+        else:  # Terminal node
+            dot.node(current_id, str(node), fillcolor='lightyellow')
+
+        return current_id
+
+    add_nodes(tree_structure)
+    dot.render(filename, format=format, cleanup=True)
     return f"{filename}.{format}"
 
 

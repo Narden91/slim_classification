@@ -148,31 +148,31 @@ class ClassificationTreeWrapper:
                 print(f"Tree for class {class_label}:")
                 tree.print_tree_representation()
 
-    def get_tree_representation(self, indent=""):
-        """
-        Returns the tree representation as a string with indentation.
-
-        Parameters
-        ----------
-        indent : str, optional
-            Indentation for tree structure representation. Default is an empty string.
-
-        Returns
-        -------
-        str
-            Returns the tree representation with the chosen indentation.
-        """
-        # For binary classification, get representation from the first tree
+    def get_tree_structure(self):
+        """Get the underlying tree structure for visualization."""
         if self.n_classes == 2:
-            return self.trees[0].get_tree_representation(indent)
+            tree = self.trees[0]
+            if hasattr(tree, 'repr_'):  # GP tree
+                return tree.repr_
+            elif hasattr(tree, 'structure'):  # GSGP tree
+                return tree.structure
+            elif hasattr(tree, 'collection'):  # SLIM_GSGP individual
+                return [t.structure for t in tree.collection]
+            else:
+                return tree
         else:
-            # For multiclass, combine representations
-            representations = []
-            for i, tree in enumerate(self.trees):
-                class_label = self.class_labels[i] if self.class_labels else i
-                representations.append(f"Tree for class {class_label}:\n")
-                representations.append(tree.get_tree_representation(indent))
-            return "".join(representations)
+            # Handle multiclass trees
+            structures = []
+            for tree in self.trees:
+                if hasattr(tree, 'repr_'):
+                    structures.append(tree.repr_)
+                elif hasattr(tree, 'structure'):
+                    structures.append(tree.structure)
+                elif hasattr(tree, 'collection'):
+                    structures.append([t.structure for t in tree.collection])
+                else:
+                    structures.append(tree)
+            return structures
 
 
 def evaluate_classification_model(model, X, y, threshold=0.5, class_labels=None):

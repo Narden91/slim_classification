@@ -102,54 +102,40 @@ def main():
     """
     Main function to run the classification example.
     """
-    # Parse command-line arguments
-    parser = argparse.ArgumentParser(description='SLIM-GSGP Classification Example')
-    parser.add_argument('--dataset', type=str, default='breast_cancer',
-                        choices=['breast_cancer', 'iris', 'digits', 'wine'],
-                        help='Dataset to use for classification')
-    parser.add_argument('--algo', type=str, default='gp',
-                        choices=['gp', 'gsgp', 'slim'],
-                        help='GP algorithm to use')
-    parser.add_argument('--strategy', type=str, default='ovr',
-                        choices=['ovr', 'ovo'],
-                        help='Multiclass strategy (One-vs-Rest or One-vs-One)')
-    parser.add_argument('--balance', action='store_true',
-                        help='Whether to balance the dataset')
-    parser.add_argument('--pop-size', type=int, default=50,
-                        help='Population size for GP')
-    parser.add_argument('--n-iter', type=int, default=20,
-                        help='Number of iterations for GP')
-    parser.add_argument('--seed', type=int, default=42,
-                        help='Random seed for reproducibility')
-    parser.add_argument('--parallel', action='store_true',
-                        help='Use parallel training for multiclass')
-
-    args = parser.parse_args()
+    # Define parameters directly
+    dataset = 'breast_cancer'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
+    algo = 'gp'               # Options: 'gp', 'gsgp', 'slim'
+    strategy = 'ovr'          # Options: 'ovr', 'ovo'
+    balance = False           # True or False
+    pop_size = 50             # Integer
+    n_iter = 20               # Integer
+    seed = 42                 # Integer
+    parallel = False          # True or False
 
     # Set random seed
-    torch.manual_seed(args.seed)
+    torch.manual_seed(seed)
 
     print(f"Running classification example with:")
-    print(f"  Dataset: {args.dataset}")
-    print(f"  Algorithm: {args.algo}")
-    print(f"  Strategy: {args.strategy}")
-    print(f"  Balance data: {args.balance}")
-    print(f"  Population size: {args.pop_size}")
-    print(f"  Iterations: {args.n_iter}")
-    print(f"  Parallel: {args.parallel}")
+    print(f"  Dataset: {dataset}")
+    print(f"  Algorithm: {algo}")
+    print(f"  Strategy: {strategy}")
+    print(f"  Balance data: {balance}")
+    print(f"  Population size: {pop_size}")
+    print(f"  Iterations: {n_iter}")
+    print(f"  Parallel: {parallel}")
     print()
 
     # Load the dataset
-    print(f"Loading dataset: {args.dataset}")
-    X, y, n_classes, class_labels = load_dataset(args.dataset)
+    print(f"Loading dataset: {dataset}")
+    X, y, n_classes, class_labels = load_dataset(dataset)
     print(f"Dataset shape: {X.shape}")
     print(f"Number of classes: {n_classes}")
     print(f"Class distribution: {torch.bincount(y).tolist()}")
     print()
 
     # Split the data into train, validation, and test sets
-    X_train, X_temp, y_train, y_temp = train_test_split(X, y, p_test=0.3, seed=args.seed)
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, p_test=0.5, seed=args.seed)
+    X_train, X_temp, y_train, y_temp = train_test_split(X, y, p_test=0.3, seed=seed)
+    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, p_test=0.5, seed=seed)
 
     print(f"Train set size: {len(X_train)}")
     print(f"Validation set size: {len(X_val)}")
@@ -158,11 +144,11 @@ def main():
 
     # Common parameters for GP
     gp_params = {
-        'pop_size': args.pop_size,
-        'n_iter': args.n_iter,
+        'pop_size': pop_size,
+        'n_iter': n_iter,
         'max_depth': 8,
-        'seed': args.seed,
-        'dataset_name': args.dataset,
+        'seed': seed,
+        'dataset_name': dataset,
         'fitness_function': 'binary_cross_entropy'  # Use custom function
     }
 
@@ -177,24 +163,24 @@ def main():
             y_train=y_train,
             X_val=X_val,
             y_val=y_val,
-            algo_type=args.algo,
-            balance_data=args.balance,
+            algo_type=algo,
+            balance_data=balance,
             **gp_params
         )
     else:
         # Multiclass classification
-        print(f"Training multiclass classifier using {args.strategy} strategy...")
+        print(f"Training multiclass classifier using {strategy} strategy...")
         model = train_multiclass_classifier(
             X_train=X_train,
             y_train=y_train,
             X_val=X_val,
             y_val=y_val,
-            strategy=args.strategy,
-            algo_type=args.algo,
-            balance_data=args.balance,
+            strategy=strategy,
+            algo_type=algo,
+            balance_data=balance,
             n_classes=n_classes,
             class_labels=class_labels,
-            parallel=args.parallel,
+            parallel=parallel,
             **gp_params
         )
 
@@ -223,9 +209,9 @@ def main():
         print("\nClassification Report:")
         print(metrics['classification_report'])
 
-    # Print tree representation
-    print("\nModel Tree Representation:")
-    model.print_tree_representation()
+    # # Print tree representation
+    # print("\nModel Tree Representation:")
+    # model.print_tree_representation()
 
     visualization_path = model.visualize_tree(filename='breast_cancer_model')
     print(f"Tree visualization saved to: {visualization_path}")

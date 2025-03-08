@@ -118,6 +118,56 @@ class MulticlassClassifier:
         """
         self.model.print_tree_representation()
 
+    def visualize_tree(self, filename='multiclass_model', format='png'):
+        """
+        Create visual representations of the model's trees.
+
+        Parameters:
+        -----------
+        filename : str
+            Output filename (without extension)
+        format : str
+            Output format ('png', 'svg', 'pdf', etc.)
+
+        Returns:
+        --------
+        list
+            Paths to the generated visualization files
+        """
+        from slim_gsgp.tree_visualizer import visualize_gp_tree
+
+        visualization_paths = []
+
+        if self.strategy == 'ovr':
+            # For one-vs-rest, create a visualization for each class
+            for i, tree in enumerate(self.model.trees):
+                class_name = self.class_labels[i] if self.class_labels else f"class_{i}"
+                class_filename = f"{filename}_{class_name}"
+                tree_str = tree.get_tree_representation()
+                path = visualize_gp_tree(tree_str, class_filename, format)
+                visualization_paths.append(path)
+
+        elif self.strategy == 'ovo':
+            # For one-vs-one, we need special handling for the wrapper
+            if hasattr(self.model.trees[0], 'pair_models'):
+                # Access the pair models from the wrapper
+                for i, ((class1, class2), model) in enumerate(self.model.trees[0].pair_models):
+                    class1_name = self.class_labels[class1] if self.class_labels else f"class_{class1}"
+                    class2_name = self.class_labels[class2] if self.class_labels else f"class_{class2}"
+                    class_filename = f"{filename}_{class1_name}_vs_{class2_name}"
+                    tree_str = model.get_tree_representation()
+                    path = visualize_gp_tree(tree_str, class_filename, format)
+                    visualization_paths.append(path)
+        else:
+            # For direct strategy, visualize all trees
+            for i, tree in enumerate(self.model.trees):
+                tree_filename = f"{filename}_tree_{i}"
+                tree_str = tree.get_tree_representation()
+                path = visualize_gp_tree(tree_str, tree_filename, format)
+                visualization_paths.append(path)
+
+        return visualization_paths
+
 
 def train_multiclass_classifier(
         X_train, y_train, X_val=None, y_val=None,
@@ -509,6 +559,16 @@ def train_one_vs_one_classifier(
                 print(f"Model {i + 1}: Class {class1} vs Class {class2}")
                 model.print_tree_representation()
                 print("\n")
+
+        def get_tree_representation(self, indent=""):
+            """Return a string representation of all binary classifiers in the wrapper."""
+            representations = []
+            for i, ((class1, class2), model) in enumerate(self.pair_models):
+                representations.append(f"{indent}Model {i + 1}: Class {class1} vs Class {class2}\n")
+                if hasattr(model, 'get_tree_representation'):
+                    representations.append(model.get_tree_representation(indent + "  "))
+                representations.append("\n")
+            return "".join(representations)
 
     # Create the wrapper
     ovo_wrapper = OneVsOneWrapper([pm for pm in pair_models], n_classes)

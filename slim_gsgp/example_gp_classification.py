@@ -26,6 +26,7 @@ This script demonstrates how to use the specialized classification modules
 for both binary and multiclass classification problems.
 """
 import time
+import os
 import torch
 
 from slim_gsgp.utils.utils import train_test_split
@@ -34,12 +35,17 @@ from slim_gsgp.classifiers.binary_classifiers import train_binary_classifier
 from slim_gsgp.classifiers.multiclass_classifiers import train_multiclass_classifier
 from slim_gsgp.tree_visualizer import visualize_classification_model
 from slim_gsgp.classifiers.classification_utils import evaluate_classification_model
+from slim_gsgp.utils.metrics_utils import save_metrics
 
 
 def main():
     """
     Main function to run the classification example.
     """
+    # Get project root directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
+
     # Define parameters directly
     dataset = 'digits'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
     algo = 'gp'  # Options: 'gp', 'gsgp', 'slim'
@@ -105,6 +111,8 @@ def main():
             balance_data=balance,
             **gp_params
         )
+        # Binary classification has no strategy
+        strategy = None
     else:
         # Multiclass classification
         print(f"Training multiclass classifier using {strategy} strategy...")
@@ -147,8 +155,37 @@ def main():
         print("\nClassification Report:")
         print(metrics['classification_report'])
 
+    # Save metrics
+    params = {
+        'pop_size': pop_size,
+        'n_iter': n_iter,
+        'max_depth': 8,
+        'parallel': parallel,
+        'training_time': training_time,
+        'num_features': X.shape[1],
+        'train_size': len(X_train),
+        'test_size': len(X_test)
+    }
+
+    metrics_path = save_metrics(
+        metrics=metrics,
+        dataset=dataset,
+        algorithm=algo,
+        strategy=strategy,
+        balance=balance,
+        params=params,
+        root_dir=root_dir
+    )
+
+    print(f"\nMetrics saved to: {metrics_path}")
+    print("Summary data also appended to: results/metrics/all_results.csv")
+
     # Visualize the model trees
-    print("\nVisualizing model trees:")
+    print("\nVisualizing model trees...")
+    vis_dir = os.path.join(root_dir, "results", "visualizations")
+    if not os.path.exists(vis_dir):
+        os.makedirs(vis_dir)
+
     base_filename = f"{dataset}_tree"
 
     try:
@@ -163,7 +200,9 @@ def main():
 
         if visualization_paths:
             print(f"Successfully saved {len(visualization_paths)} tree visualizations")
-            print(f"Visualizations stored in visualizations/{dataset}/{strategy}/{algo}/ directory")
+            rel_path = os.path.join("results", "visualizations", dataset,
+                                    strategy if strategy else "binary", algo)
+            print(f"Visualizations stored in {rel_path}/ directory")
         else:
             print("No visualizations were created")
     except Exception as e:
@@ -177,6 +216,8 @@ def main():
         except Exception as e:
             print(f"Built-in visualization also failed: {str(e)}")
             print("Unable to visualize the model trees")
+
+    print("\nExperiment completed successfully.")
 
 
 if __name__ == "__main__":

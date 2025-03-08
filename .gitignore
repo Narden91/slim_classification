@@ -4,9 +4,11 @@ slim_gsgp/log/TEST_slim_postgrid_resid_build_sale_price-size.csv
 slim_gsgp/log/TESTING_GSGP_settings.csv
 slim_gsgp/log/slim_postgrid_resid_build_sale_price-size.csv_test_ignore
 slim_gsgp/log/slim_postgrid_resid_build_sale_price-size.csv_test_ignore
-slim_gsgp.egg-info/
+slim_gsgp.egg-info/*
 .idea/*
 .DS_Store
 .idea/.name
 *.pyc
 /log
+*.csv
+

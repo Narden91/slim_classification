@@ -36,6 +36,7 @@ from slim_gsgp.classifiers.classification_utils import (
     create_balanced_data,
     calculate_class_weights
 )
+from slim_gsgp.tree_visualizer import visualize_gp_tree
 
 
 class BinaryClassifier:
@@ -72,21 +73,25 @@ class BinaryClassifier:
         self.fitness_function = fitness_function
         self.threshold = threshold
 
-    def predict_proba(self, X):
+    def predict(self, X, threshold=None):
         """
-        Predict class probabilities.
+        Predict class labels.
 
         Parameters
         ----------
         X : torch.Tensor
             Input features.
+        threshold : float, optional
+            Threshold for binary classification. If None, use self.threshold.
 
         Returns
         -------
         torch.Tensor
-            Class probabilities (shape: [n_samples, 2]).
+            Predicted class labels (0 or 1).
         """
-        return self.model.predict_proba(X)
+        if threshold is None:
+            threshold = self.threshold
+        return self.model.predict(X, threshold=threshold)
 
     def predict(self, X):
         """
@@ -109,6 +114,25 @@ class BinaryClassifier:
         Print the tree representation for interpretability.
         """
         self.model.print_tree_representation()
+
+    def visualize_tree(self, filename='gp_tree', format='png'):
+        """
+        Create a visual representation of the model's tree.
+
+        Parameters:
+        -----------
+        filename : str
+            Output filename (without extension)
+        format : str
+            Output format ('png', 'svg', 'pdf', etc.)
+
+        Returns:
+        --------
+        str
+            Path to the generated visualization file
+        """
+        tree_str = self.model.get_tree_representation()
+        return visualize_gp_tree(tree_str, filename, format)
 
 
 def train_binary_classifier(

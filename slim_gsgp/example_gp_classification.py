@@ -163,7 +163,7 @@ def main():
         'max_depth': 8,
         'seed': args.seed,
         'dataset_name': args.dataset,
-        'fitness_function': binary_cross_entropy_with_logits,  # Use our custom function
+        'fitness_function': 'binary_cross_entropy'  # Use custom function
     }
 
     # Train the classifier
@@ -226,6 +226,9 @@ def main():
     # Print tree representation
     print("\nModel Tree Representation:")
     model.print_tree_representation()
+
+    visualization_path = model.visualize_tree(filename='breast_cancer_model')
+    print(f"Tree visualization saved to: {visualization_path}")
 
 
 if __name__ == "__main__":

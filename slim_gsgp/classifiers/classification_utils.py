@@ -148,6 +148,32 @@ class ClassificationTreeWrapper:
                 print(f"Tree for class {class_label}:")
                 tree.print_tree_representation()
 
+    def get_tree_representation(self, indent=""):
+        """
+        Returns the tree representation as a string with indentation.
+
+        Parameters
+        ----------
+        indent : str, optional
+            Indentation for tree structure representation. Default is an empty string.
+
+        Returns
+        -------
+        str
+            Returns the tree representation with the chosen indentation.
+        """
+        # For binary classification, get representation from the first tree
+        if self.n_classes == 2:
+            return self.trees[0].get_tree_representation(indent)
+        else:
+            # For multiclass, combine representations
+            representations = []
+            for i, tree in enumerate(self.trees):
+                class_label = self.class_labels[i] if self.class_labels else i
+                representations.append(f"Tree for class {class_label}:\n")
+                representations.append(tree.get_tree_representation(indent))
+            return "".join(representations)
+
 
 def evaluate_classification_model(model, X, y, threshold=0.5, class_labels=None):
     """

@@ -19,115 +19,213 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from slim_gsgp.main_gp import gp  # Import GP from SLIM
-from slim_gsgp.datasets.data_loader import load_breast_cancer  # Load dataset
-from slim_gsgp.evaluators.fitness_functions import binary_cross_entropy  # Import BCE fitness function
-from slim_gsgp.utils.utils import train_test_split  # Train-test split function
+"""
+Enhanced example script for classification using the SLIM-GSGP framework.
+
+This script demonstrates how to use the specialized classification modules
+for both binary and multiclass classification problems.
+"""
+
+import argparse
+import time
 import torch
-from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score,
-                             roc_auc_score, confusion_matrix, classification_report)
+from sklearn.datasets import load_iris, load_breast_cancer, load_digits, load_wine
+from sklearn.preprocessing import StandardScaler
+
+from slim_gsgp.utils.utils import train_test_split
+from slim_gsgp.classifiers.binary_classifiers import train_binary_classifier
+from slim_gsgp.classifiers.multiclass_classifiers import train_multiclass_classifier
+from slim_gsgp.classifiers.classification_utils import (
+    evaluate_classification_model,
+    binary_cross_entropy_with_logits
+)
+
+
+def load_dataset(dataset_name):
+    """
+    Load and preprocess a dataset for classification.
+
+    Parameters
+    ----------
+    dataset_name : str
+        Name of the dataset to load ('breast_cancer', 'iris', 'digits', or 'wine').
+
+    Returns
+    -------
+    tuple
+        (X, y, n_classes, class_labels) where X and y are the features and labels,
+        n_classes is the number of classes, and class_labels are the class names.
+    """
+    # Select and load the dataset
+    if dataset_name == 'breast_cancer':
+        data = load_breast_cancer()
+        X = data.data
+        y = data.target
+        class_labels = data.target_names.tolist()
+    elif dataset_name == 'iris':
+        data = load_iris()
+        X = data.data
+        y = data.target
+        class_labels = data.target_names.tolist()
+    elif dataset_name == 'digits':
+        data = load_digits()
+        X = data.data
+        y = data.target
+        class_labels = [str(i) for i in range(10)]  # Digit names (0-9)
+    elif dataset_name == 'wine':
+        data = load_wine()
+        X = data.data
+        y = data.target
+        class_labels = ["Class " + str(i) for i in range(len(data.target_names))]
+    else:
+        raise ValueError(f"Unknown dataset: {dataset_name}")
+
+    # Perform feature scaling (standardization)
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+
+    # Convert to PyTorch tensors
+    X = torch.tensor(X, dtype=torch.float32)
+    y = torch.tensor(y, dtype=torch.long)
+
+    # Determine number of classes
+    n_classes = len(torch.unique(y))
+
+    # For both binary and multiclass problems, we want long integers for y
+    # The classification modules will handle conversion to float when needed
+    y = y.long()
+
+    return X, y, n_classes, class_labels
 
 
 def main():
-    # Load dataset
-    # X, y = load_ppb(X_y=True)
-    X, y = load_breast_cancer(X_y=True)
+    """
+    Main function to run the classification example.
+    """
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='SLIM-GSGP Classification Example')
+    parser.add_argument('--dataset', type=str, default='breast_cancer',
+                        choices=['breast_cancer', 'iris', 'digits', 'wine'],
+                        help='Dataset to use for classification')
+    parser.add_argument('--algo', type=str, default='gp',
+                        choices=['gp', 'gsgp', 'slim'],
+                        help='GP algorithm to use')
+    parser.add_argument('--strategy', type=str, default='ovr',
+                        choices=['ovr', 'ovo'],
+                        help='Multiclass strategy (One-vs-Rest or One-vs-One)')
+    parser.add_argument('--balance', action='store_true',
+                        help='Whether to balance the dataset')
+    parser.add_argument('--pop-size', type=int, default=50,
+                        help='Population size for GP')
+    parser.add_argument('--n-iter', type=int, default=20,
+                        help='Number of iterations for GP')
+    parser.add_argument('--seed', type=int, default=42,
+                        help='Random seed for reproducibility')
+    parser.add_argument('--parallel', action='store_true',
+                        help='Use parallel training for multiclass')
 
-    # Convert to PyTorch tensors if not already
-    X = torch.tensor(X, dtype=torch.float32) if not isinstance(X, torch.Tensor) else X
-    y = torch.tensor(y, dtype=torch.long) if not isinstance(y, torch.Tensor) else y
+    args = parser.parse_args()
 
-    # Detect number of classes
-    n_classes = len(torch.unique(y))
-    print(f"Detected {n_classes} classes -> {'Binary' if n_classes == 2 else 'Multiclass'} classification")
+    # Set random seed
+    torch.manual_seed(args.seed)
 
-    # Split into train and test sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, p_test=0.2)
+    print(f"Running classification example with:")
+    print(f"  Dataset: {args.dataset}")
+    print(f"  Algorithm: {args.algo}")
+    print(f"  Strategy: {args.strategy}")
+    print(f"  Balance data: {args.balance}")
+    print(f"  Population size: {args.pop_size}")
+    print(f"  Iterations: {args.n_iter}")
+    print(f"  Parallel: {args.parallel}")
+    print()
 
-    # Further split test set into validation and test
-    X_val, X_test, y_val, y_test = train_test_split(X_test, y_test, p_test=0.3)
+    # Load the dataset
+    print(f"Loading dataset: {args.dataset}")
+    X, y, n_classes, class_labels = load_dataset(args.dataset)
+    print(f"Dataset shape: {X.shape}")
+    print(f"Number of classes: {n_classes}")
+    print(f"Class distribution: {torch.bincount(y).tolist()}")
+    print()
 
-    # Choose fitness function based on classification type
-    fitness_function = "binary_cross_entropy" if n_classes == 2 else "cross_entropy"
+    # Split the data into train, validation, and test sets
+    X_train, X_temp, y_train, y_temp = train_test_split(X, y, p_test=0.3, seed=args.seed)
+    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, p_test=0.5, seed=args.seed)
 
-    # Train the model using genetic programming (GP)
-    final_tree = gp(X_train=X_train, y_train=y_train,
-                    X_test=X_val, y_test=y_val,
-                    dataset_name='breast_cancer',
-                    pop_size=100, n_iter=10,
-                    max_depth=None, fitness_function=fitness_function)
+    print(f"Train set size: {len(X_train)}")
+    print(f"Validation set size: {len(X_val)}")
+    print(f"Test set size: {len(X_test)}")
+    print()
 
-    # Display the best evolved tree
-    final_tree.print_tree_representation()
+    # Common parameters for GP
+    gp_params = {
+        'pop_size': args.pop_size,
+        'n_iter': args.n_iter,
+        'max_depth': 8,
+        'seed': args.seed,
+        'dataset_name': args.dataset,
+        'fitness_function': binary_cross_entropy_with_logits,  # Use our custom function
+    }
 
-    # Get raw predictions on the test set
-    raw_predictions = final_tree.predict(X_test)
+    # Train the classifier
+    start_time = time.time()
 
-    # Ensure predictions are in tensor form
-    raw_predictions_tensor = (raw_predictions if isinstance(raw_predictions, torch.Tensor)
-                              else torch.tensor(raw_predictions, dtype=torch.float32))
-
-    # Process predictions and calculate metrics based on classification type
     if n_classes == 2:
-        # Binary Classification
-        sigmoid = torch.nn.Sigmoid()
-        probabilities = sigmoid(raw_predictions_tensor)
-        predictions = (probabilities > 0.5).long()  # Binary predictions (0 or 1)
-
-        # Convert to NumPy for sklearn compatibility
-        y_true = y_test.numpy() if isinstance(y_test, torch.Tensor) else y_test
-        y_pred = predictions.numpy() if isinstance(predictions, torch.Tensor) else predictions
-        y_prob = probabilities.numpy() if isinstance(probabilities, torch.Tensor) else probabilities
-
-        # Calculate binary metrics
-        accuracy = accuracy_score(y_true, y_pred)
-        precision = precision_score(y_true, y_pred)
-        recall = recall_score(y_true, y_pred)
-        f1 = f1_score(y_true, y_pred)
-        roc_auc = roc_auc_score(y_true, y_prob)
-        conf_matrix = confusion_matrix(y_true, y_pred)
-
-        # Display results
-        print(f"Accuracy: {accuracy * 100:.2f}%")
-        print(f"Precision: {precision * 100:.2f}%")
-        print(f"Recall: {recall * 100:.4f}")
-        print(f"F1 Score: {f1 * 100:.2f}%")
-        print(f"ROC AUC: {roc_auc * 100:.2f}%")
-        print("Confusion Matrix:")
-        print(conf_matrix)
-
+        # Binary classification
+        print("Training binary classifier...")
+        model = train_binary_classifier(
+            X_train=X_train,
+            y_train=y_train,
+            X_val=X_val,
+            y_val=y_val,
+            algo_type=args.algo,
+            balance_data=args.balance,
+            **gp_params
+        )
     else:
-        # Multiclass Classification
-        softmax = torch.nn.Softmax(dim=1)  # Apply softmax across class dimension
-        probabilities = softmax(raw_predictions_tensor)
-        predictions = torch.argmax(probabilities, dim=1)  # Predicted class indices
+        # Multiclass classification
+        print(f"Training multiclass classifier using {args.strategy} strategy...")
+        model = train_multiclass_classifier(
+            X_train=X_train,
+            y_train=y_train,
+            X_val=X_val,
+            y_val=y_val,
+            strategy=args.strategy,
+            algo_type=args.algo,
+            balance_data=args.balance,
+            n_classes=n_classes,
+            class_labels=class_labels,
+            parallel=args.parallel,
+            **gp_params
+        )
 
-        # Convert to NumPy for sklearn compatibility
-        y_true = y_test.numpy() if isinstance(y_test, torch.Tensor) else y_test
-        y_pred = predictions.numpy() if isinstance(predictions, torch.Tensor) else predictions
+    training_time = time.time() - start_time
+    print(f"Training completed in {training_time:.2f} seconds")
+    print()
 
-        # Calculate multiclass metrics
-        accuracy = accuracy_score(y_true, y_pred)
-        precision_macro = precision_score(y_true, y_pred, average='macro')
-        recall_macro = recall_score(y_true, y_pred, average='macro')
-        f1_macro = f1_score(y_true, y_pred, average='macro')
-        precision_micro = precision_score(y_true, y_pred, average='micro')
-        recall_micro = recall_score(y_true, y_pred, average='micro')
-        f1_micro = f1_score(y_true, y_pred, average='micro')
-        conf_matrix = confusion_matrix(y_true, y_pred)
+    # Evaluate on test set
+    print("Evaluating on test set:")
+    metrics = evaluate_classification_model(
+        model=model,
+        X=X_test,
+        y=y_test,
+        class_labels=class_labels
+    )
 
-        # Display results
-        print(f"Accuracy: {accuracy * 100:.2f}%")
-        print(f"Precision (Macro): {precision_macro * 100:.2f}%")
-        print(f"Recall (Macro): {recall_macro * 100:.2f}%")
-        print(f"F1 Score (Macro): {f1_macro * 100:.2f}%")
-        print(f"Precision (Micro): {precision_micro * 100:.2f}%")
-        print(f"Recall (Micro): {recall_micro * 100:.2f}%")
-        print(f"F1 Score (Micro): {f1_micro * 100:.2f}%")
-        print("Confusion Matrix:")
-        print(conf_matrix)
+    # Print metrics
+    for name, value in metrics.items():
+        if name not in ['confusion_matrix', 'classification_report']:
+            print(f"{name}: {value:.4f}")
+
+    print("\nConfusion Matrix:")
+    print(metrics['confusion_matrix'])
+
+    if n_classes > 2 and 'classification_report' in metrics:
         print("\nClassification Report:")
-        print(classification_report(y_true, y_pred))
+        print(metrics['classification_report'])
+
+    # Print tree representation
+    print("\nModel Tree Representation:")
+    model.print_tree_representation()
 
 
 if __name__ == "__main__":

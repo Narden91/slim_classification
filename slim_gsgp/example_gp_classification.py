@@ -25,8 +25,6 @@ Enhanced example script for classification using the SLIM-GSGP framework.
 This script demonstrates how to use the specialized classification modules
 for both binary and multiclass classification problems.
 """
-
-import argparse
 import time
 import torch
 from sklearn.datasets import load_iris, load_breast_cancer, load_digits, load_wine
@@ -103,7 +101,7 @@ def main():
     Main function to run the classification example.
     """
     # Define parameters directly
-    dataset = 'breast_cancer'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
+    dataset = 'digits'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
     algo = 'gp'               # Options: 'gp', 'gsgp', 'slim'
     strategy = 'ovr'          # Options: 'ovr', 'ovo'
     balance = False           # True or False

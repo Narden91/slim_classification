@@ -96,7 +96,7 @@ class MulticlassClassifier:
         """
         return self.model.predict_proba(X)
 
-    def predict(self, X):
+    def predict(self, X, threshold=None):
         """
         Predict class labels.
 
@@ -104,13 +104,19 @@ class MulticlassClassifier:
         ----------
         X : torch.Tensor
             Input features.
+        threshold : float, optional
+            Threshold for binary classification (ignored for multiclass).
 
         Returns
         -------
         torch.Tensor
             Predicted class labels (0 to n_classes-1).
         """
-        return self.model.predict(X)
+        # For multiclass, threshold is only relevant for binary submodels
+        if self.strategy == 'ovr' or self.strategy == 'ovo':
+            return self.model.predict(X, threshold=threshold)
+        else:
+            return self.model.predict(X)
 
     def print_tree_representation(self):
         """

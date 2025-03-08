@@ -20,80 +20,20 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 """
-Enhanced example script for classification using the SLIM-GSGP framework.
+Example script for classification using the SLIM-GSGP framework.
 
 This script demonstrates how to use the specialized classification modules
 for both binary and multiclass classification problems.
 """
 import time
 import torch
-from sklearn.datasets import load_iris, load_breast_cancer, load_digits, load_wine
-from sklearn.preprocessing import StandardScaler
 
 from slim_gsgp.utils.utils import train_test_split
+from slim_gsgp.datasets.data_loader import load_classification_dataset
 from slim_gsgp.classifiers.binary_classifiers import train_binary_classifier
 from slim_gsgp.classifiers.multiclass_classifiers import train_multiclass_classifier
-from slim_gsgp.classifiers.classification_utils import (
-    evaluate_classification_model,
-    binary_cross_entropy_with_logits
-)
-
-
-def load_dataset(dataset_name):
-    """
-    Load and preprocess a dataset for classification.
-
-    Parameters
-    ----------
-    dataset_name : str
-        Name of the dataset to load ('breast_cancer', 'iris', 'digits', or 'wine').
-
-    Returns
-    -------
-    tuple
-        (X, y, n_classes, class_labels) where X and y are the features and labels,
-        n_classes is the number of classes, and class_labels are the class names.
-    """
-    # Select and load the dataset
-    if dataset_name == 'breast_cancer':
-        data = load_breast_cancer()
-        X = data.data
-        y = data.target
-        class_labels = data.target_names.tolist()
-    elif dataset_name == 'iris':
-        data = load_iris()
-        X = data.data
-        y = data.target
-        class_labels = data.target_names.tolist()
-    elif dataset_name == 'digits':
-        data = load_digits()
-        X = data.data
-        y = data.target
-        class_labels = [str(i) for i in range(10)]  # Digit names (0-9)
-    elif dataset_name == 'wine':
-        data = load_wine()
-        X = data.data
-        y = data.target
-        class_labels = ["Class " + str(i) for i in range(len(data.target_names))]
-    else:
-        raise ValueError(f"Unknown dataset: {dataset_name}")
-
-    # Perform feature scaling (standardization)
-    scaler = StandardScaler()
-    X = scaler.fit_transform(X)
-
-    # Convert to PyTorch tensors
-    X = torch.tensor(X, dtype=torch.float32)
-    y = torch.tensor(y, dtype=torch.long)
-
-    # Determine number of classes
-    n_classes = len(torch.unique(y))
-
-    # For both binary and multiclass problems, we want long integers for y
-    # The classification modules will handle conversion to float when needed
-    y = y.long()
-
-    return X, y, n_classes, class_labels
+from slim_gsgp.tree_visualizer import visualize_classification_model
+from slim_gsgp.classifiers.classification_utils import evaluate_classification_model
 
 
 def main():
@@ -102,13 +42,13 @@ def main():
     """
     # Define parameters directly
     dataset = 'digits'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
-    algo = 'gp'               # Options: 'gp', 'gsgp', 'slim'
-    strategy = 'ovr'          # Options: 'ovr', 'ovo'
-    balance = False           # True or False
-    pop_size = 50             # Integer
-    n_iter = 20               # Integer
-    seed = 42                 # Integer
-    parallel = False          # True or False
+    algo = 'gp'  # Options: 'gp', 'gsgp', 'slim'
+    strategy = 'ovr'  # Options: 'ovr', 'ovo'
+    balance = False  # True or False
+    pop_size = 50  # Integer
+    n_iter = 20  # Integer
+    seed = 42  # Integer
+    parallel = False  # True or False
 
     # Set random seed
     torch.manual_seed(seed)
@@ -125,7 +65,7 @@ def main():
 
     # Load the dataset
     print(f"Loading dataset: {dataset}")
-    X, y, n_classes, class_labels = load_dataset(dataset)
+    X, y, n_classes, class_labels = load_classification_dataset(dataset)
     print(f"Dataset shape: {X.shape}")
     print(f"Number of classes: {n_classes}")
     print(f"Class distribution: {torch.bincount(y).tolist()}")
@@ -147,7 +87,7 @@ def main():
         'max_depth': 8,
         'seed': seed,
         'dataset_name': dataset,
-        'fitness_function': 'binary_cross_entropy'  # Use custom function
+        'fitness_function': 'binary_cross_entropy'
     }
 
     # Train the classifier
@@ -207,12 +147,36 @@ def main():
         print("\nClassification Report:")
         print(metrics['classification_report'])
 
-    # # Print tree representation
-    # print("\nModel Tree Representation:")
-    # model.print_tree_representation()
+    # Visualize the model trees
+    print("\nVisualizing model trees:")
+    base_filename = f"{dataset}_tree"
 
-    visualization_path = model.visualize_tree(filename='breast_cancer_model')
-    print(f"Tree visualization saved to: {visualization_path}")
+    try:
+        # Pass dataset, algorithm and strategy to organize directories
+        visualization_paths = visualize_classification_model(
+            model,
+            base_filename,
+            dataset=dataset,
+            algorithm=algo,
+            strategy=strategy
+        )
+
+        if visualization_paths:
+            print(f"Successfully saved {len(visualization_paths)} tree visualizations")
+            print(f"Visualizations stored in visualizations/{dataset}/{strategy}/{algo}/ directory")
+        else:
+            print("No visualizations were created")
+    except Exception as e:
+        print(f"Enhanced visualization failed: {str(e)}")
+        print("Falling back to model's built-in visualization...")
+
+        # Fall back to the model's built-in visualization
+        try:
+            visualization_path = model.visualize_tree(filename=base_filename)
+            print(f"Built-in visualization saved to: {visualization_path}")
+        except Exception as e:
+            print(f"Built-in visualization also failed: {str(e)}")
+            print("Unable to visualize the model trees")
 
 
 if __name__ == "__main__":

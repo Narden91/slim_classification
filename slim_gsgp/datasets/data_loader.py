@@ -796,3 +796,64 @@ def load_bioav(X_y=True):
         )
     else:
         return df
+
+
+def load_classification_dataset(dataset_name):
+    """
+    Load and preprocess a dataset for classification.
+
+    Parameters
+    ----------
+    dataset_name : str
+        Name of the dataset to load ('breast_cancer', 'iris', 'digits', or 'wine').
+
+    Returns
+    -------
+    tuple
+        (X, y, n_classes, class_labels) where X and y are the features and labels,
+        n_classes is the number of classes, and class_labels are the class names.
+    """
+    import torch
+    from sklearn.datasets import load_iris, load_breast_cancer, load_digits, load_wine
+    from sklearn.preprocessing import StandardScaler
+
+    # Select and load the dataset
+    if dataset_name == 'breast_cancer':
+        data = load_breast_cancer()
+        X = data.data
+        y = data.target
+        class_labels = data.target_names.tolist()
+    elif dataset_name == 'iris':
+        data = load_iris()
+        X = data.data
+        y = data.target
+        class_labels = data.target_names.tolist()
+    elif dataset_name == 'digits':
+        data = load_digits()
+        X = data.data
+        y = data.target
+        class_labels = [str(i) for i in range(10)]  # Digit names (0-9)
+    elif dataset_name == 'wine':
+        data = load_wine()
+        X = data.data
+        y = data.target
+        class_labels = ["Class " + str(i) for i in range(len(data.target_names))]
+    else:
+        raise ValueError(f"Unknown dataset: {dataset_name}")
+
+    # Perform feature scaling (standardization)
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+
+    # Convert to PyTorch tensors
+    X = torch.tensor(X, dtype=torch.float32)
+    y = torch.tensor(y, dtype=torch.long)
+
+    # Determine number of classes
+    n_classes = len(torch.unique(y))
+
+    # For both binary and multiclass problems, we want long integers for y
+    # The classification modules will handle conversion to float when needed
+    y = y.long()
+
+    return X, y, n_classes, class_labels

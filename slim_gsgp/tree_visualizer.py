@@ -1,4 +1,5 @@
 import re
+import os
 from graphviz import Digraph
 
 
@@ -128,6 +129,169 @@ def visualize_gp_tree(tree_structure, filename='gp_tree', format='png'):
     add_nodes(tree_structure)
     dot.render(filename, format=format, cleanup=True)
     return f"{filename}.{format}"
+
+
+def extract_tree_structure(tree):
+    """
+    Extract tree structure from different types of tree objects.
+
+    Parameters:
+    -----------
+    tree : object
+        The tree object to extract structure from
+
+    Returns:
+    --------
+    object
+        The extracted tree structure, or None if extraction failed
+    """
+    try:
+        # Try different approaches to get the tree structure
+        if hasattr(tree, 'get_tree_structure'):
+            return tree.get_tree_structure()
+        elif hasattr(tree, 'repr_'):
+            return tree.repr_
+        elif hasattr(tree, 'structure'):
+            return tree.structure
+        elif hasattr(tree, 'collection'):
+            return [t.structure for t in tree.collection]
+        else:
+            # Last resort: just return the tree itself
+            print(f"Warning: Using direct tree object of type {type(tree)} for visualization")
+            return tree
+    except Exception as e:
+        print(f"Error extracting tree structure: {str(e)}")
+        return None
+
+
+def visualize_classification_model(model, base_filename, format='png', dataset=None, algorithm=None, strategy=None):
+    """
+    Visualize trees in a classification model (both binary and multiclass).
+
+    Parameters:
+    -----------
+    model : BinaryClassifier or MulticlassClassifier
+        The trained classification model
+    base_filename : str
+        Base filename for the output visualization files
+    format : str
+        Output format ('png', 'svg', etc.)
+    dataset : str, optional
+        Dataset name for organizing visualizations
+    algorithm : str, optional
+        Algorithm type (gp, gsgp, slim) for organizing visualizations
+    strategy : str, optional
+        Classification strategy (ovr, ovo) for organizing visualizations
+
+    Returns:
+    --------
+    list
+        Paths to the generated visualization files
+    """
+    visualization_paths = []
+
+    # Create visualization directory structure
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.abspath(os.path.join(root_dir, os.pardir))
+    vis_dir = os.path.join(parent_dir, "result_visualizations_gp")
+    if not os.path.exists(vis_dir):
+        os.makedirs(vis_dir)
+
+    # Set up path based on provided info
+    if dataset:
+        vis_dir = os.path.join(vis_dir, dataset)
+        if not os.path.exists(vis_dir):
+            os.makedirs(vis_dir)
+
+    # Determine strategy from model if not provided
+    if not strategy and hasattr(model, 'strategy'):
+        strategy = model.strategy.lower()
+
+    if strategy:
+        vis_dir = os.path.join(vis_dir, strategy)
+        if not os.path.exists(vis_dir):
+            os.makedirs(vis_dir)
+
+    if algorithm:
+        vis_dir = os.path.join(vis_dir, algorithm)
+        if not os.path.exists(vis_dir):
+            os.makedirs(vis_dir)
+
+    # Determine if it's a binary or multiclass model
+    is_multiclass = hasattr(model, 'n_classes') and model.n_classes > 2
+
+    if is_multiclass:
+        # For multiclass models, we need to extract individual trees
+        if hasattr(model.model, 'trees'):
+            trees = model.model.trees
+        else:
+            # For more complex models like OVO
+            print("Model structure doesn't have direct tree access, trying alternate methods")
+            trees = [model.model]  # Fall back to treating the whole model as one tree
+
+        # Handle different multiclass strategies (OVR or OVO)
+        if hasattr(model, 'strategy') and model.strategy.lower() == 'ovr':
+            # One tree per class
+            for i, tree in enumerate(trees):
+                # Get class label
+                class_label = model.class_labels[i] if model.class_labels else f"class_{i}"
+                class_filename = os.path.join(vis_dir, f"{base_filename}_{class_label}")
+
+                # Extract and visualize tree
+                tree_structure = extract_tree_structure(tree)
+                if tree_structure:
+                    path = visualize_gp_tree(tree_structure, class_filename, format)
+                    visualization_paths.append(path)
+                    print(f"Saved visualization for {class_label} to {path}")
+                else:
+                    print(f"Could not extract structure for {class_label}")
+
+        elif hasattr(model, 'strategy') and model.strategy.lower() == 'ovo':
+            # For OVO, check if the wrapper has pair_models
+            if hasattr(trees[0], 'pair_models'):
+                for (class1, class2), pair_model in trees[0].pair_models:
+                    # Create filename for this pair
+                    class1_name = model.class_labels[class1] if model.class_labels else f"class_{class1}"
+                    class2_name = model.class_labels[class2] if model.class_labels else f"class_{class2}"
+                    pair_filename = os.path.join(vis_dir, f"{base_filename}_{class1_name}_vs_{class2_name}")
+
+                    # Extract and visualize tree
+                    tree_structure = extract_tree_structure(pair_model)
+                    if tree_structure:
+                        path = visualize_gp_tree(tree_structure, pair_filename, format)
+                        visualization_paths.append(path)
+                        print(f"Saved visualization for {class1_name} vs {class2_name} to {path}")
+                    else:
+                        print(f"Could not extract structure for {class1_name} vs {class2_name}")
+            else:
+                print("OVO strategy model doesn't have the expected structure")
+                # Fall back to treating each tree individually
+                for i, tree in enumerate(trees):
+                    tree_structure = extract_tree_structure(tree)
+                    if tree_structure:
+                        tree_filename = os.path.join(vis_dir, f"{base_filename}_tree_{i}")
+                        path = visualize_gp_tree(tree_structure, tree_filename, format)
+                        visualization_paths.append(path)
+        else:
+            # Direct or unknown strategy, visualize all trees separately
+            for i, tree in enumerate(trees):
+                tree_structure = extract_tree_structure(tree)
+                if tree_structure:
+                    tree_filename = os.path.join(vis_dir, f"{base_filename}_tree_{i}")
+                    path = visualize_gp_tree(tree_structure, tree_filename, format)
+                    visualization_paths.append(path)
+    else:
+        # Binary model - only one tree to visualize
+        tree_structure = extract_tree_structure(model.model)
+        if tree_structure:
+            full_filename = os.path.join(vis_dir, base_filename)
+            path = visualize_gp_tree(tree_structure, full_filename, format)
+            visualization_paths.append(path)
+            print(f"Saved binary classifier visualization to {path}")
+        else:
+            print("Could not extract structure for binary classifier")
+
+    return visualization_paths
 
 
 # Example usage:

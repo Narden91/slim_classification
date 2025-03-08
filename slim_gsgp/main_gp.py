@@ -55,7 +55,6 @@ def gp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None
        tree_constants: list = [float(key.replace("constant_", "").replace("_", "-")) for key in CONSTANTS],
        tournament_size: int = 2,
        test_elite: bool = gp_solve_parameters["test_elite"]):
-
     """
     Main function to execute the StandardGP algorithm on specified datasets
 
@@ -132,7 +131,6 @@ def gp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None
                     minimization=minimization, n_jobs=n_jobs, test_elite=test_elite, fitness_function=fitness_function,
                     initializer=initializer, tournament_size=tournament_size)
 
-
     assert 0 <= p_xo <= 1, "p_xo must be a number between 0 and 1"
 
     if test_elite and (X_test is None or y_test is None):
@@ -148,7 +146,6 @@ def gp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None
         warnings.warn("No dataset name set. Using default value of dataset_1.")
         dataset_name = "dataset_1"
 
-
     # creating a list with the valid available fitness functions
     valid_fitnesses = list(fitness_function_options)
 
@@ -156,7 +153,6 @@ def gp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None
     assert fitness_function.lower() in fitness_function_options.keys(), \
         "fitness function must be: " + f"{', '.join(valid_fitnesses[:-1])} or {valid_fitnesses[-1]}" \
             if len(valid_fitnesses) > 1 else valid_fitnesses[0]
-
 
     # creating a list with the valid available initializers
     valid_initializers = list(initializer_options)
@@ -208,7 +204,7 @@ def gp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None
     gp_parameters["p_m"] = 1 - gp_parameters["p_xo"]
     gp_parameters["pop_size"] = pop_size
     gp_parameters["mutator"] = mutate_tree_subtree(
-        gp_pi_init['init_depth'],  gp_pi_init["TERMINALS"], gp_pi_init['CONSTANTS'], gp_pi_init['FUNCTIONS'],
+        gp_pi_init['init_depth'], gp_pi_init["TERMINALS"], gp_pi_init['CONSTANTS'], gp_pi_init['FUNCTIONS'],
         p_c=gp_pi_init['p_c']
     )
     gp_parameters["initializer"] = initializer_options[initializer]
@@ -272,7 +268,8 @@ if __name__ == "__main__":
 
     final_tree = gp(X_train=X_train, y_train=y_train,
                     X_test=X_val, y_test=y_val,
-                    dataset_name='resid_build_sale_price', pop_size=100, n_iter=1000, prob_const=0, fitness_function="rmse", n_jobs=2)
+                    dataset_name='resid_build_sale_price', pop_size=100, n_iter=1000, prob_const=0,
+                    fitness_function="rmse", n_jobs=2)
 
     final_tree.print_tree_representation()
     predictions = final_tree.predict(X_test)

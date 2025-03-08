@@ -86,7 +86,9 @@ fitness_function_options = {
     "mse": mse,
     "mae": mae,
     "mae_int": mae_int,
-    "signed_errors": signed_errors
+    "signed_errors": signed_errors,
+    "binary_cross_entropy": torch.nn.BCEWithLogitsLoss(),
+    "cross_entropy": torch.nn.CrossEntropyLoss()
 }
 
 initializer_options = {

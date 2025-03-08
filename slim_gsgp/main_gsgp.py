@@ -34,6 +34,7 @@ from slim_gsgp.utils.logger import log_settings
 from slim_gsgp.utils.utils import get_terminals, validate_inputs, generate_random_uniform
 from typing import Callable
 
+
 def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None, y_test: torch.Tensor = None,
          dataset_name: str = None,
          pop_size: int = gsgp_parameters["pop_size"],
@@ -160,8 +161,8 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
 
     # assuring the chosen fitness_function is valid
     assert fitness_function.lower() in fitness_function_options.keys(), \
-                    "fitness function must be: "+f"{', '.join(valid_fitnesses[:-1])} or {valid_fitnesses[-1]}"\
-                                                                    if len(valid_fitnesses) > 1 else valid_fitnesses[0]
+        "fitness function must be: " + f"{', '.join(valid_fitnesses[:-1])} or {valid_fitnesses[-1]}" \
+            if len(valid_fitnesses) > 1 else valid_fitnesses[0]
 
     # creating a list with the valid available initializers
     valid_initializers = list(initializer_options)
@@ -169,7 +170,7 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     # assuring the chosen initializer is valid
     assert initializer.lower() in initializer_options.keys(), \
         "initializer must be " + f"{', '.join(valid_initializers[:-1])} or {valid_initializers[-1]}" \
-                                                            if len(valid_initializers) > 1 else valid_initializers[0]
+            if len(valid_initializers) > 1 else valid_initializers[0]
 
     # ================================
     #       Parameter Definition
@@ -199,7 +200,6 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
             "The available tree functions are: " + f"{', '.join(valid_functions[:-1])} or "f"{valid_functions[-1]}"
             if len(valid_functions) > 1 else valid_functions[0])
 
-
     try:
         gsgp_pi_init['CONSTANTS'] = {f"constant_{str(n).replace('-', '_')}": lambda _, num=n: torch.tensor(num)
                                      for n in tree_constants}
@@ -208,7 +208,6 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
         raise KeyError(
             "The available tree constants are: " + f"{', '.join(valid_constants[:-1])} or "f"{valid_constants[-1]}"
             if len(valid_constants) > 1 else valid_constants[0])
-
 
     # setting up the configuration dictionaries based on the user given input
     gsgp_pi_init["init_pop_size"] = pop_size
@@ -284,8 +283,9 @@ if __name__ == "__main__":
 
     final_tree = gsgp(X_train=X_train, y_train=y_train,
                       X_test=X_val, y_test=y_val,
-                      dataset_name='resid_build_sale_price', pop_size=100, n_iter=1000, log_path=os.path.join(os.getcwd(),
-                                                                "log", f"TESTING_GSGP.csv"), fitness_function="rmse", n_jobs=2)
+                      dataset_name='resid_build_sale_price', pop_size=100, n_iter=1000,
+                      log_path=os.path.join(os.getcwd(),
+                                            "log", f"TESTING_GSGP.csv"), fitness_function="rmse", n_jobs=2)
 
     predictions = final_tree.predict(X_test)
     print(float(rmse(y_true=y_test, y_pred=predictions)))

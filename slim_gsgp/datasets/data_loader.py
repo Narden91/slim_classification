@@ -262,7 +262,7 @@ def load_breast_cancer(X_y=True):
 
     Breast Cancer Wisconsin (Diagnostic) dataset.
     Downloaded from the StatLib archive.
-    The file is located in /slim_gsgp/datasets/data/boston.txt
+    The file is located in /slim_gsgp/datasets/data/breast_cancer.txt
 
     Basic information:
     - Number of data instances: 569;

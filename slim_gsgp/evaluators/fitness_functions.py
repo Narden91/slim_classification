@@ -119,3 +119,22 @@ def signed_errors(y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
         Signed error values.
     """
     return torch.sub(y_true, y_pred)
+
+
+def binary_cross_entropy(y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
+    """
+    Compute Binary Cross-Entropy (BCE) loss.
+
+    Parameters
+    ----------
+    y_true : torch.Tensor
+        True values.
+    y_pred : torch.Tensor
+        Predicted values.
+
+    Returns
+    -------
+    torch.Tensor
+        BCE value.
+    """
+    return torch.mean(-y_true * torch.log(y_pred) - (1 - y_true) * torch.log(1 - y_pred), dim=len(y_pred.shape) - 1)

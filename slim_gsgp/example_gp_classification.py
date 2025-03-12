@@ -47,8 +47,8 @@ def main():
     root_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
 
     # Define parameters directly
-    dataset = 'digits'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
-    algo = 'gp'  # Options: 'gp', 'gsgp', 'slim'
+    dataset = 'breast_cancer'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
+    algo = 'gsgp'  # Options: 'gp', 'gsgp', 'slim'
     strategy = 'ovr'  # Options: 'ovr', 'ovo'
     balance = False  # True or False
     pop_size = 50  # Integer

@@ -28,6 +28,10 @@ import uuid
 import os
 import warnings
 
+import torch
+from torch import nn
+import numpy as np
+
 from slim_gsgp.algorithms.GSGP.gsgp import GSGP
 from slim_gsgp.config.gsgp_config import *
 from slim_gsgp.utils.logger import log_settings
@@ -156,6 +160,27 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     # assuring the p_xo is valid
     assert 0 <= p_xo <= 1, "p_xo must be a number between 0 and 1"
 
+    # ================================
+    #   Classification Fitness Support
+    # ================================
+
+    # Extend fitness_function_options with classification fitness functions
+    classification_fitness_functions = {
+        "binary_cross_entropy": torch.nn.BCEWithLogitsLoss(),
+        "cross_entropy": torch.nn.CrossEntropyLoss()
+    }
+
+    # Create a combined dictionary for validation
+    all_fitness_functions = {**fitness_function_options, **classification_fitness_functions}
+
+    # creating a list with the valid available fitness functions
+    valid_fitnesses = list(all_fitness_functions)
+
+    # assuring the chosen fitness_function is valid
+    assert fitness_function.lower() in all_fitness_functions.keys(), \
+        "fitness function must be: " + f"{', '.join(valid_fitnesses[:-1])} or {valid_fitnesses[-1]}" \
+            if len(valid_fitnesses) > 1 else valid_fitnesses[0]
+
     # creating a list with the valid available fitness functions
     valid_fitnesses = list(fitness_function_options)
 
@@ -233,6 +258,36 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
 
     #   *************** GSGP_SOLVE_PARAMETERS ***************
 
+    # ================================
+    #   Set up the fitness function
+    # ================================
+
+    # Check if we're using a classification fitness function
+    is_classification = fitness_function.lower() in classification_fitness_functions
+
+    if is_classification:
+        # For PyTorch loss functions, we need to handle them specially
+        original_loss = classification_fitness_functions[fitness_function.lower()]
+
+        if fitness_function.lower() == "binary_cross_entropy":
+            # For binary classification
+            def fitness_wrapper(y_true, y_pred):
+                # Ensure y_true is float for BCE
+                y_true = y_true.float()
+                return original_loss(y_pred, y_true)
+
+            gsgp_solve_parameters["ffunction"] = fitness_wrapper
+        elif fitness_function.lower() == "cross_entropy":
+            # For multiclass classification
+            def fitness_wrapper(y_true, y_pred):
+                # Ensure y_true is long (integer) for CrossEntropy
+                y_true = y_true.long()
+                return original_loss(y_pred, y_true)
+            gsgp_solve_parameters["ffunction"] = fitness_wrapper
+    else:
+        # For standard regression fitness functions
+        gsgp_solve_parameters["ffunction"] = fitness_function_options[fitness_function]
+
     # setting up the information of the run, for logging purposes
     gsgp_solve_parameters["run_info"] = [algo_name, unique_run_id, dataset_name]
     gsgp_solve_parameters["n_iter"] = n_iter
@@ -244,7 +299,7 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     gsgp_solve_parameters["log"] = log_level
     gsgp_solve_parameters["verbose"] = verbose
     gsgp_solve_parameters["reconstruct"] = reconstruct
-    gsgp_solve_parameters["ffunction"] = fitness_function_options[fitness_function]
+    # gsgp_solve_parameters["ffunction"] = fitness_function_options[fitness_function]
 
     # ================================
     #       Running the Algorithm

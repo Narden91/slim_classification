@@ -196,13 +196,16 @@ def train_binary_classifier(
             **kwargs
         )
     elif algo_type.lower() == 'gsgp':
+        # Remove max_depth from kwargs if it exists
+        gsgp_kwargs = {k: v for k, v in kwargs.items() if k != 'max_depth'}
+        gsgp_kwargs['reconstruct'] = True
         model = gsgp(
             X_train=X_train,
             y_train=y_train,
             X_test=X_val,
             y_test=y_val,
             fitness_function=fitness_function,
-            **kwargs
+            **gsgp_kwargs
         )
     elif algo_type.lower() == 'slim':
         model = slim(

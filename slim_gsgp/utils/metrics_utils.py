@@ -53,7 +53,6 @@ def save_metrics(metrics, dataset, algorithm, strategy=None, balance=False,
     str
         Path to the saved metrics file
     """
-
     # Get project root directory if not provided
     if root_dir is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -134,6 +133,28 @@ def save_metrics(metrics, dataset, algorithm, strategy=None, balance=False,
                     # Handle string metrics (or other non-numeric types)
                     csv_data[f"metric_{key}"] = str(value)
 
+        # Extract confusion matrix elements (TN, TP, FN, FP) for binary classification
+        if "confusion_matrix" in metrics:
+            conf_matrix = np.array(metrics["confusion_matrix"])  # Convert to numpy array for consistency
+
+            # For binary classification (2x2 matrix)
+            if conf_matrix.shape == (2, 2):
+                csv_data["TN"] = int(conf_matrix[0, 0])
+                csv_data["FP"] = int(conf_matrix[0, 1])
+                csv_data["FN"] = int(conf_matrix[1, 0])
+                csv_data["TP"] = int(conf_matrix[1, 1])
+
+            # For multiclass, include total numbers
+            else:
+                # Calculate overall TP, TN, FP, FN for multiclass
+                # (This is a simplification; multiclass confusion matrices are more complex)
+                tp_sum = np.sum(np.diag(conf_matrix))  # Sum of diagonal elements (correct predictions)
+                total = np.sum(conf_matrix)
+                fp_sum = total - tp_sum  # All incorrect predictions
+
+                csv_data["TP_total"] = int(tp_sum)
+                csv_data["FP_total"] = int(fp_sum)
+
         # Add parameters with param_ prefix
         if params:
             for key, value in params.items():
@@ -151,61 +172,84 @@ def save_metrics(metrics, dataset, algorithm, strategy=None, balance=False,
         # Convert to DataFrame for easier CSV handling
         df = pd.DataFrame([csv_data])
 
+        # Define the preferred column order
+        preferred_order = [
+            # First metadata columns
+            "exp_id", "dataset", "algorithm", "strategy", "balanced_data", "date", "time",
+            # Then metrics columns (these will be dynamically identified)
+            # Then confusion matrix elements
+            "TN", "FP", "FN", "TP", "TP_total", "FP_total"
+            # Parameter columns will be added at the end
+        ]
+
         # Check if file exists
         if os.path.exists(summary_file):
-            # Check if existing CSV has the same columns
-            existing_df = pd.read_csv(summary_file)
+            try:
+                # Read existing file
+                existing_df = pd.read_csv(summary_file)
 
-            # If columns don't match, merge them
-            if set(existing_df.columns) != set(df.columns):
-                # Create a new DataFrame with all columns from both
-                all_columns = sorted(list(set(existing_df.columns) | set(df.columns)))
-
-                # Read the file again, specifying all columns
-                existing_df = pd.read_csv(summary_file, usecols=lambda x: x in all_columns)
-
-                # Append new data and save entire dataframe
+                # Combine DataFrames
                 combined_df = pd.concat([existing_df, df], ignore_index=True)
+
+                # Get all columns and organize them
+                all_columns = list(combined_df.columns)
 
                 # Organize columns in a logical order
                 ordered_columns = []
 
-                # First experiment metadata columns
-                meta_cols = [col for col in combined_df.columns if
+                # Add metadata columns in preferred order
+                for col in preferred_order:
+                    if col in all_columns:
+                        ordered_columns.append(col)
+                        all_columns.remove(col)
+
+                # Add remaining metadata columns not in preferred order
+                meta_cols = [col for col in all_columns if
                              not (col.startswith("metric_") or col.startswith("param_"))]
                 ordered_columns.extend(sorted(meta_cols))
 
-                # Then metrics columns
-                metric_cols = [col for col in combined_df.columns if col.startswith("metric_")]
+                # Add metric columns
+                metric_cols = [col for col in all_columns if col.startswith("metric_")]
                 ordered_columns.extend(sorted(metric_cols))
 
-                # Finally parameter columns
-                param_cols = [col for col in combined_df.columns if col.startswith("param_")]
+                # Add parameter columns
+                param_cols = [col for col in all_columns if col.startswith("param_")]
                 ordered_columns.extend(sorted(param_cols))
 
-                # Save with ordered columns
+                # Reorder and save
                 combined_df = combined_df[ordered_columns]
                 combined_df.to_csv(summary_file, index=False)
-            else:
-                # Same columns, just append
-                df.to_csv(summary_file, mode='a', header=False, index=False)
+
+            except Exception as e:
+                # If there's an error reading the existing file, create a new one
+                print(f"Error handling existing CSV file: {e}. Creating a new file.")
+                os.rename(summary_file, f"{summary_file}.bak.{timestamp}")
+                df.to_csv(summary_file, index=False)
         else:
-            # New file, sort columns logically
+            # New file, organize columns logically
+            all_columns = list(df.columns)
             ordered_columns = []
 
-            # First experiment metadata columns
-            meta_cols = [col for col in df.columns if not (col.startswith("metric_") or col.startswith("param_"))]
+            # Add metadata columns in preferred order
+            for col in preferred_order:
+                if col in all_columns:
+                    ordered_columns.append(col)
+                    all_columns.remove(col)
+
+            # Add remaining metadata columns not in preferred order
+            meta_cols = [col for col in all_columns if
+                         not (col.startswith("metric_") or col.startswith("param_"))]
             ordered_columns.extend(sorted(meta_cols))
 
-            # Then metrics columns
-            metric_cols = [col for col in df.columns if col.startswith("metric_")]
+            # Add metric columns
+            metric_cols = [col for col in all_columns if col.startswith("metric_")]
             ordered_columns.extend(sorted(metric_cols))
 
-            # Finally parameter columns
-            param_cols = [col for col in df.columns if col.startswith("param_")]
+            # Add parameter columns
+            param_cols = [col for col in all_columns if col.startswith("param_")]
             ordered_columns.extend(sorted(param_cols))
 
-            # Save with ordered columns
+            # Reorder and save
             df = df[ordered_columns]
             df.to_csv(summary_file, index=False)
 

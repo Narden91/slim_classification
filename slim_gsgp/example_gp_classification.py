@@ -48,7 +48,7 @@ def main():
 
     # Define parameters directly
     dataset = 'breast_cancer'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
-    algo = 'gsgp'  # Options: 'gp', 'gsgp', 'slim'
+    algo = 'gp'  # Options: 'gp', 'gsgp', 'slim'
     strategy = 'ovr'  # Options: 'ovr', 'ovo'
     balance = True  # True or False
     pop_size = 50  # Integer

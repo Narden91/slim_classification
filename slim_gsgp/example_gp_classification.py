@@ -48,13 +48,13 @@ def main():
 
     # Define parameters directly
     dataset = 'breast_cancer'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
-    algo = 'gp'  # Options: 'gp', 'gsgp', 'slim'
+    algo = 'gsgp'  # Options: 'gp', 'gsgp', 'slim'
     strategy = 'ovr'  # Options: 'ovr', 'ovo'
     balance = True  # True or False
     pop_size = 50  # Integer
     n_iter = 2  # Integer
     seed = 42  # Integer
-    parallel = False  # True or False
+    parallel = True  # True or False
 
     # Set random seed
     torch.manual_seed(seed)

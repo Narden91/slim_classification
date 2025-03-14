@@ -1,6 +1,7 @@
 import re
 import os
 from graphviz import Digraph
+from datetime import datetime
 from slim_gsgp.utils.utils import create_result_directory
 
 
@@ -232,8 +233,9 @@ def visualize_classification_model(model, base_filename, format='png', dataset=N
     list
         Paths to the generated visualization files
     """
-    import os
-    from slim_gsgp.utils.utils import create_result_directory
+
+    # Generate a timestamp for unique filenames
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     visualization_paths = []
 
@@ -263,6 +265,9 @@ def visualize_classification_model(model, base_filename, format='png', dataset=N
     # Determine if it's a binary or multiclass model
     is_multiclass = hasattr(model, 'n_classes') and model.n_classes > 2
 
+    # Add timestamp to the base filename to make it unique
+    unique_base_filename = f"{base_filename}_{timestamp}"
+
     if is_multiclass:
         # For multiclass models, we need to extract individual trees
         if hasattr(model.model, 'trees'):
@@ -278,7 +283,7 @@ def visualize_classification_model(model, base_filename, format='png', dataset=N
             for i, tree in enumerate(trees):
                 # Get class label
                 class_label = model.class_labels[i] if model.class_labels else f"class_{i}"
-                class_filename = os.path.join(vis_dir, f"{base_filename}_{class_label}")
+                class_filename = os.path.join(vis_dir, f"{unique_base_filename}_{class_label}")
 
                 # Extract and visualize tree
                 tree_structure = extract_tree_structure(tree)
@@ -296,7 +301,7 @@ def visualize_classification_model(model, base_filename, format='png', dataset=N
                     # Create filename for this pair
                     class1_name = model.class_labels[class1] if model.class_labels else f"class_{class1}"
                     class2_name = model.class_labels[class2] if model.class_labels else f"class_{class2}"
-                    pair_filename = os.path.join(vis_dir, f"{base_filename}_{class1_name}_vs_{class2_name}")
+                    pair_filename = os.path.join(vis_dir, f"{unique_base_filename}_{class1_name}_vs_{class2_name}")
 
                     # Extract and visualize tree
                     tree_structure = extract_tree_structure(pair_model)
@@ -312,7 +317,7 @@ def visualize_classification_model(model, base_filename, format='png', dataset=N
                 for i, tree in enumerate(trees):
                     tree_structure = extract_tree_structure(tree)
                     if tree_structure:
-                        tree_filename = os.path.join(vis_dir, f"{base_filename}_tree_{i}")
+                        tree_filename = os.path.join(vis_dir, f"{unique_base_filename}_tree_{i}")
                         path = visualize_gp_tree(tree_structure, tree_filename, format)
                         visualization_paths.append(path)
         else:
@@ -320,14 +325,14 @@ def visualize_classification_model(model, base_filename, format='png', dataset=N
             for i, tree in enumerate(trees):
                 tree_structure = extract_tree_structure(tree)
                 if tree_structure:
-                    tree_filename = os.path.join(vis_dir, f"{base_filename}_tree_{i}")
+                    tree_filename = os.path.join(vis_dir, f"{unique_base_filename}_tree_{i}")
                     path = visualize_gp_tree(tree_structure, tree_filename, format)
                     visualization_paths.append(path)
     else:
         # Binary model - only one tree to visualize
         tree_structure = extract_tree_structure(model.model)
         if tree_structure:
-            full_filename = os.path.join(vis_dir, base_filename)
+            full_filename = os.path.join(vis_dir, unique_base_filename)
             path = visualize_gp_tree(tree_structure, full_filename, format)
             visualization_paths.append(path)
             print(f"Saved binary classifier visualization to {path}")

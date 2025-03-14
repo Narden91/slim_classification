@@ -32,7 +32,7 @@ from slim_gsgp.algorithms.GP.representations.tree_utils import tree_depth
 from slim_gsgp.config.gp_config import *
 from slim_gsgp.selection.selection_algorithms import tournament_selection_max, tournament_selection_min
 from slim_gsgp.utils.logger import log_settings
-from slim_gsgp.utils.utils import (get_terminals, validate_inputs, get_best_max, get_best_min)
+from slim_gsgp.utils.utils import (get_terminals, validate_inputs, get_best_max, get_best_min, create_result_directory)
 
 
 def gp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None, y_test: torch.Tensor = None,
@@ -122,8 +122,16 @@ def gp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None
     # ================================
 
     # Setting the log_path
+    # if log_path is None:
+    #     log_path = os.path.join(os.getcwd(), "log", "gp.csv")
     if log_path is None:
-        log_path = os.path.join(os.getcwd(), "log", "gp.csv")
+        log_dir = create_result_directory(
+            root_dir=os.getcwd(),
+            dataset=dataset_name if dataset_name else "unknown",
+            algorithm="gp",
+            result_type="logs"
+        )
+        log_path = os.path.join(log_dir, f"gp_{seed}.csv")
 
     validate_inputs(X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test, pop_size=pop_size, n_iter=n_iter,
                     elitism=elitism, n_elites=n_elites, init_depth=init_depth, log_path=log_path, prob_const=prob_const,

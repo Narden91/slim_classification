@@ -115,14 +115,34 @@ class BinaryClassifier:
         """
         self.model.print_tree_representation()
 
-    def visualize_tree(self, filename='gp_tree', format='png'):
-        """Create a visual representation of the model's tree."""
+    def visualize_tree(self, filename='gp_tree', format='png', dataset=None, algorithm=None):
+        """Create a visual representation of the model's tree.
 
+        Parameters:
+        -----------
+        filename : str
+            Base filename or full path for the output file
+        format : str
+            Output format ('png', 'svg', etc.)
+        dataset : str, optional
+            Dataset name for directory organization
+        algorithm : str, optional
+            Algorithm name for directory organization
+
+        Returns:
+        --------
+        str
+            Path to the visualization file
+        """
         # Get the tree structure directly
         tree_structure = self.model.get_tree_structure()
 
-        # Visualize using the direct method
-        return visualize_gp_tree(tree_structure, filename, format)
+        # If dataset and algorithm are provided, use them for proper directory structure
+        if dataset and algorithm:
+            return visualize_gp_tree(tree_structure, filename, format, dataset, algorithm)
+        else:
+            # Otherwise just use the filename as is
+            return visualize_gp_tree(tree_structure, filename, format)
 
 
 def train_binary_classifier(

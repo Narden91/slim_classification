@@ -1,6 +1,7 @@
 import re
 import os
 from graphviz import Digraph
+from slim_gsgp.utils.utils import create_result_directory
 
 
 def parse_tree_string(tree_str):
@@ -91,8 +92,29 @@ def create_graphviz_tree(tree, filename='gp_tree', format='png'):
     return dot
 
 
-def visualize_gp_tree(tree_structure, filename='gp_tree', format='png'):
-    """Create visualization directly from tree structure instead of parsing strings."""
+def visualize_gp_tree(tree_structure, filename='gp_tree', format='png', dataset=None, algorithm=None):
+    """Create visualization directly from tree structure instead of parsing strings.
+
+    Parameters:
+    -----------
+    tree_structure : tuple or list
+        The tree structure to visualize
+    filename : str
+        Base filename for the output visualization file
+    format : str
+        Output format ('png', 'svg', etc.)
+    dataset : str, optional
+        Dataset name for organizing visualizations
+    algorithm : str, optional
+        Algorithm type for organizing visualizations
+
+    Returns:
+    --------
+    str
+        Path to the generated visualization file
+    """
+
+    # Create a visualization
     dot = Digraph(comment='GP Tree Visualization')
     dot.attr('node', shape='box', style='filled')
 
@@ -127,8 +149,30 @@ def visualize_gp_tree(tree_structure, filename='gp_tree', format='png'):
         return current_id
 
     add_nodes(tree_structure)
-    dot.render(filename, format=format, cleanup=True)
-    return f"{filename}.{format}"
+
+    # If dataset and algorithm are provided, use the standard result directory
+    if dataset and algorithm:
+        # Get project root directory
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
+
+        # Create result directory
+        vis_dir = create_result_directory(
+            root_dir=root_dir,
+            dataset=dataset,
+            algorithm=algorithm,
+            result_type="visualizations"
+        )
+
+        # Use the provided directory for the output
+        filepath = os.path.join(vis_dir, filename)
+    else:
+        # Use the filename as provided (relative path)
+        filepath = filename
+
+    # Render the graph
+    dot.render(filepath, format=format, cleanup=True)
+    return f"{filepath}.{format}"
 
 
 def extract_tree_structure(tree):
@@ -188,34 +232,33 @@ def visualize_classification_model(model, base_filename, format='png', dataset=N
     list
         Paths to the generated visualization files
     """
+    import os
+    from slim_gsgp.utils.utils import create_result_directory
+
     visualization_paths = []
 
-    # Create visualization directory structure
-    root_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.abspath(os.path.join(root_dir, os.pardir))
-    vis_dir = os.path.join(parent_dir, "result_visualizations_gp")
-    if not os.path.exists(vis_dir):
-        os.makedirs(vis_dir)
+    # Get project root directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
 
-    # Set up path based on provided info
-    if dataset:
-        vis_dir = os.path.join(vis_dir, dataset)
-        if not os.path.exists(vis_dir):
-            os.makedirs(vis_dir)
+    # Set default values if not provided
+    if not dataset:
+        dataset = "unknown_dataset"
+    if not algorithm:
+        algorithm = "unknown_algorithm"
 
     # Determine strategy from model if not provided
     if not strategy and hasattr(model, 'strategy'):
         strategy = model.strategy.lower()
 
-    if strategy:
-        vis_dir = os.path.join(vis_dir, strategy)
-        if not os.path.exists(vis_dir):
-            os.makedirs(vis_dir)
-
-    if algorithm:
-        vis_dir = os.path.join(vis_dir, algorithm)
-        if not os.path.exists(vis_dir):
-            os.makedirs(vis_dir)
+    # Create the directory structure
+    vis_dir = create_result_directory(
+        root_dir=root_dir,
+        dataset=dataset,
+        algorithm=algorithm,
+        result_type="visualizations",
+        strategy=strategy
+    )
 
     # Determine if it's a binary or multiclass model
     is_multiclass = hasattr(model, 'n_classes') and model.n_classes > 2

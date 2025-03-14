@@ -29,7 +29,7 @@ import time
 import os
 import torch
 
-from slim_gsgp.utils.utils import train_test_split
+from slim_gsgp.utils.utils import train_test_split, create_result_directory
 from slim_gsgp.datasets.data_loader import load_classification_dataset
 from slim_gsgp.classifiers.binary_classifiers import train_binary_classifier
 from slim_gsgp.classifiers.multiclass_classifiers import train_multiclass_classifier
@@ -48,11 +48,11 @@ def main():
 
     # Define parameters directly
     dataset = 'breast_cancer'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
-    algo = 'gsgp'  # Options: 'gp', 'gsgp', 'slim'
+    algo = 'gp'  # Options: 'gp', 'gsgp', 'slim'
     strategy = 'ovr'  # Options: 'ovr', 'ovo'
-    balance = False  # True or False
+    balance = True  # True or False
     pop_size = 50  # Integer
-    n_iter = 20  # Integer
+    n_iter = 2  # Integer
     seed = 42  # Integer
     parallel = False  # True or False
 
@@ -178,14 +178,9 @@ def main():
     )
 
     print(f"\nMetrics saved to: {metrics_path}")
-    print("Summary data also appended to: results/metrics/all_results.csv")
 
     # Visualize the model trees
     print("\nVisualizing model trees...")
-    vis_dir = os.path.join(root_dir, "results", "visualizations")
-    if not os.path.exists(vis_dir):
-        os.makedirs(vis_dir)
-
     base_filename = f"{dataset}_tree"
 
     try:
@@ -200,18 +195,35 @@ def main():
 
         if visualization_paths:
             print(f"Successfully saved {len(visualization_paths)} tree visualizations")
-            rel_path = os.path.join("results", "visualizations", dataset,
-                                    strategy if strategy else "binary", algo)
-            print(f"Visualizations stored in {rel_path}/ directory")
+            print(
+                f"Visualizations stored in results/{dataset}/{algo}{strategy if strategy else ''}/visualizations/ directory")
         else:
             print("No visualizations were created")
     except Exception as e:
         print(f"Enhanced visualization failed: {str(e)}")
         print("Falling back to model's built-in visualization...")
 
-        # Fall back to the model's built-in visualization
+        # Fall back to the model's built-in visualization but use our directory structure
         try:
-            visualization_path = model.visualize_tree(filename=base_filename)
+            # Get project root directory
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            root_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
+
+            # Create proper directory using our utility
+            from slim_gsgp.utils.utils import create_result_directory
+            vis_dir = create_result_directory(
+                root_dir=root_dir,
+                dataset=dataset,
+                algorithm=algo,
+                result_type="visualizations",
+                strategy=strategy
+            )
+
+            # Use full path with proper directory
+            vis_filename = os.path.join(vis_dir, base_filename)
+
+            # Call model's visualization with our path
+            visualization_path = model.visualize_tree(filename=vis_filename, dataset=dataset, algorithm=algo)
             print(f"Built-in visualization saved to: {visualization_path}")
         except Exception as e:
             print(f"Built-in visualization also failed: {str(e)}")

@@ -39,6 +39,7 @@ from slim_gsgp.classifiers.classification_utils import (
     convert_to_one_vs_rest,
     create_balanced_data
 )
+from slim_gsgp.tree_visualizer import visualize_gp_tree
 
 
 class MulticlassClassifier:
@@ -124,7 +125,7 @@ class MulticlassClassifier:
         """
         self.model.print_tree_representation()
 
-    def visualize_tree(self, filename='multiclass_model', format='png'):
+    def visualize_tree(self, filename='multiclass_model', format='png', dataset=None, algorithm=None):
         """
         Create visual representations of the model's trees.
 
@@ -134,14 +135,16 @@ class MulticlassClassifier:
             Output filename (without extension)
         format : str
             Output format ('png', 'svg', 'pdf', etc.)
+        dataset : str, optional
+            Dataset name for directory organization
+        algorithm : str, optional
+            Algorithm name for directory organization
 
         Returns:
         --------
         list
             Paths to the generated visualization files
         """
-        from slim_gsgp.tree_visualizer import visualize_gp_tree
-
         visualization_paths = []
 
         if self.strategy == 'ovr':
@@ -150,7 +153,7 @@ class MulticlassClassifier:
                 class_name = self.class_labels[i] if self.class_labels else f"class_{i}"
                 class_filename = f"{filename}_{class_name}"
                 tree_str = tree.get_tree_representation()
-                path = visualize_gp_tree(tree_str, class_filename, format)
+                path = visualize_gp_tree(tree_str, class_filename, format, dataset, algorithm)
                 visualization_paths.append(path)
 
         elif self.strategy == 'ovo':
@@ -162,14 +165,14 @@ class MulticlassClassifier:
                     class2_name = self.class_labels[class2] if self.class_labels else f"class_{class2}"
                     class_filename = f"{filename}_{class1_name}_vs_{class2_name}"
                     tree_str = model.get_tree_representation()
-                    path = visualize_gp_tree(tree_str, class_filename, format)
+                    path = visualize_gp_tree(tree_str, class_filename, format, dataset, algorithm)
                     visualization_paths.append(path)
         else:
             # For direct strategy, visualize all trees
             for i, tree in enumerate(self.model.trees):
                 tree_filename = f"{filename}_tree_{i}"
                 tree_str = tree.get_tree_representation()
-                path = visualize_gp_tree(tree_str, tree_filename, format)
+                path = visualize_gp_tree(tree_str, tree_filename, format, dataset, algorithm)
                 visualization_paths.append(path)
 
         return visualization_paths

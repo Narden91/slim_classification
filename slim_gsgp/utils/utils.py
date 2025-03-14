@@ -20,6 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import math
+import os
 import random
 
 import numpy as np
@@ -271,7 +272,7 @@ def get_terminals(X):
         Dictionary of terminal nodes.
     """
 
-    return  {f"x{i}": i for i in range(len(X[0]))}
+    return {f"x{i}": i for i in range(len(X[0]))}
 
 
 def get_best_min(population, n_elites):
@@ -590,7 +591,7 @@ def validate_inputs(X_train, y_train, X_test, y_test, pop_size, n_iter, elitism,
         raise TypeError("tree_constants must be a non-empty list")
 
     assert all(isinstance(elem, (int, float)) and not isinstance(elem, bool) for elem in tree_constants), \
-    "tree_constants must be a list containing only integers and floats"
+        "tree_constants must be a list containing only integers and floats"
 
     if not isinstance(log, int):
         raise TypeError("log_level must be an int")
@@ -651,6 +652,7 @@ def check_slim_version(slim_version):
     else:
         raise Exception('Invalid SLIM configuration')
 
+
 def _evaluate_slim_individual(individual, ffunction, y, testing=False, operator="sum"):
     """
     Evaluate the individual using a fitness function.
@@ -691,10 +693,59 @@ def _evaluate_slim_individual(individual, ffunction, y, testing=False, operator=
 
         # if testing is false, return the value so that training parallelization has effect
         return ffunction(
-                y,
-                torch.clamp(
-                    operator(individual.train_semantics, dim=0),
-                    -1000000000000.0,
-                    1000000000000.0,
-                ),
-            )
+            y,
+            torch.clamp(
+                operator(individual.train_semantics, dim=0),
+                -1000000000000.0,
+                1000000000000.0,
+            ),
+        )
+
+
+def create_result_directory(root_dir, dataset, algorithm, result_type, strategy=None):
+    """
+    Create and return a standardized directory path for results.
+
+    Parameters
+    ----------
+    root_dir : str
+        Project root directory
+    dataset : str
+        Dataset name
+    algorithm : str
+        Algorithm name (gp, gsgp, slim)
+    result_type : str
+        Type of result ('metrics' or 'visualizations')
+    strategy : str, optional
+        Classification strategy (for classification problems)
+
+    Returns
+    -------
+    str
+        Path to the created directory
+    """
+    # Create base results directory
+    results_dir = os.path.join(root_dir, "results")
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
+
+    # Create dataset directory
+    dataset_dir = os.path.join(results_dir, dataset)
+    if not os.path.exists(dataset_dir):
+        os.makedirs(dataset_dir)
+
+    # Create algorithm directory
+    if strategy:
+        algorithm_dir = os.path.join(dataset_dir, f"{algorithm}_{strategy}")
+    else:
+        algorithm_dir = os.path.join(dataset_dir, algorithm)
+
+    if not os.path.exists(algorithm_dir):
+        os.makedirs(algorithm_dir)
+
+    # Create result type directory
+    result_dir = os.path.join(algorithm_dir, result_type)
+    if not os.path.exists(result_dir):
+        os.makedirs(result_dir)
+
+    return result_dir

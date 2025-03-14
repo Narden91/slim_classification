@@ -6,6 +6,7 @@ import json
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from slim_gsgp.utils.utils import create_result_directory
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -52,39 +53,29 @@ def save_metrics(metrics, dataset, algorithm, strategy=None, balance=False,
     str
         Path to the saved metrics file
     """
+
     # Get project root directory if not provided
     if root_dir is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         root_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
 
-    # Create metrics directory structure
-    metrics_dir = os.path.join(root_dir, "results", "metrics")
-    if not os.path.exists(metrics_dir):
-        os.makedirs(metrics_dir)
-
-    # Create subdirectories
-    dataset_dir = os.path.join(metrics_dir, dataset)
-    if not os.path.exists(dataset_dir):
-        os.makedirs(dataset_dir)
-
-    if strategy:
-        strategy_dir = os.path.join(dataset_dir, strategy)
-        if not os.path.exists(strategy_dir):
-            os.makedirs(strategy_dir)
-    else:
-        strategy_dir = dataset_dir
-
-    algo_dir = os.path.join(strategy_dir, algorithm)
-    if not os.path.exists(algo_dir):
-        os.makedirs(algo_dir)
+    # Create metrics directory using the utility function
+    metrics_dir = create_result_directory(
+        root_dir=root_dir,
+        dataset=dataset,
+        algorithm=algorithm,
+        result_type="metrics",
+        strategy=strategy
+    )
 
     # Create a timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Format the filename
     balance_str = "balanced" if balance else "unbalanced"
-    filename = f"{dataset}_{strategy or 'binary'}_{algorithm}_{balance_str}_{timestamp}.json"
-    filepath = os.path.join(algo_dir, filename)
+    strategy_str = f"_{strategy}" if strategy else "_binary"
+    filename = f"{dataset}{strategy_str}_{algorithm}_{balance_str}_{timestamp}.json"
+    filepath = os.path.join(metrics_dir, filename)
 
     # Create a metrics dictionary with metadata
     metrics_with_meta = {
@@ -153,7 +144,9 @@ def save_metrics(metrics, dataset, algorithm, strategy=None, balance=False,
                     csv_data[f"param_{key}"] = str(value)
 
         # Create or append to CSV
-        summary_file = os.path.join(metrics_dir, "all_results.csv")
+        # Save the CSV summary in the main results directory
+        results_dir = os.path.join(root_dir, "results")
+        summary_file = os.path.join(results_dir, "all_results.csv")
 
         # Convert to DataFrame for easier CSV handling
         df = pd.DataFrame([csv_data])
@@ -233,11 +226,13 @@ def load_metrics(filepath):
     dict
         Dictionary of metrics and metadata
     """
+    import json
+
     with open(filepath, 'r') as f:
         return json.load(f)
 
 
-def load_all_metrics(root_dir=None):
+def load_all_metrics(root_dir=None, dataset=None, algorithm=None, strategy=None):
     """
     Load all metrics from CSV summary file into a DataFrame.
 
@@ -245,20 +240,39 @@ def load_all_metrics(root_dir=None):
     -----------
     root_dir : str, optional
         Project root directory
+    dataset : str, optional
+        Filter by dataset name
+    algorithm : str, optional
+        Filter by algorithm
+    strategy : str, optional
+        Filter by strategy
 
     Returns:
     --------
     pandas.DataFrame
         DataFrame containing all metrics results
     """
+    import os
+    import pandas as pd
+
     # Get project root directory if not provided
     if root_dir is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         root_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
 
-    metrics_file = os.path.join(root_dir, "results", "metrics", "all_results.csv")
+    metrics_file = os.path.join(root_dir, "results", "all_results.csv")
 
     if os.path.exists(metrics_file):
-        return pd.read_csv(metrics_file)
+        df = pd.read_csv(metrics_file)
+
+        # Apply filters if provided
+        if dataset:
+            df = df[df['dataset'] == dataset]
+        if algorithm:
+            df = df[df['algorithm'] == algorithm]
+        if strategy:
+            df = df[df['strategy'] == strategy]
+
+        return df
     else:
         return pd.DataFrame()

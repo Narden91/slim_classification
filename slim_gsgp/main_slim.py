@@ -31,10 +31,9 @@ from slim_gsgp.algorithms.SLIM_GSGP.slim_gsgp import SLIM_GSGP
 from slim_gsgp.config.slim_config import *
 from slim_gsgp.utils.logger import log_settings
 from slim_gsgp.utils.utils import (get_terminals, check_slim_version, validate_inputs, generate_random_uniform,
-                                   get_best_min, get_best_max)
+                                   get_best_min, get_best_max, create_result_directory)
 from slim_gsgp.algorithms.SLIM_GSGP.operators.mutators import inflate_mutation
 from slim_gsgp.selection.selection_algorithms import tournament_selection_max, tournament_selection_min
-
 
 ELITES = {}
 UNIQUE_RUN_ID = uuid.uuid1()
@@ -60,12 +59,11 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
          prob_const: float = slim_gsgp_pi_init["p_c"],
          tree_functions: list = list(FUNCTIONS.keys()),
          tree_constants: list = [float(key.replace("constant_", "").replace("_", "-")) for key in CONSTANTS],
-         copy_parent: bool =slim_gsgp_parameters["copy_parent"],
+         copy_parent: bool = slim_gsgp_parameters["copy_parent"],
          max_depth: int | None = slim_gsgp_solve_parameters["max_depth"],
          n_jobs: int = slim_gsgp_solve_parameters["n_jobs"],
          tournament_size: int = 2,
          test_elite: bool = slim_gsgp_solve_parameters["test_elite"]):
-
     """
     Main function to execute the SLIM GSGP algorithm on specified datasets.
 
@@ -142,8 +140,16 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     # ================================
 
     # Setting the log_path
+    # if log_path is None:
+    #     log_path = os.path.join(os.getcwd(), "log", "slim_gsgp.csv")
     if log_path is None:
-        log_path = os.path.join(os.getcwd(), "log", "slim_gsgp.csv")
+        log_dir = create_result_directory(
+            root_dir=os.getcwd(),
+            dataset=dataset_name if dataset_name else "unknown",
+            algorithm=f"slim_{slim_version}",
+            result_type="logs"
+        )
+        log_path = os.path.join(log_dir, f"slim_{seed}.csv")
 
     op, sig, trees = check_slim_version(slim_version=slim_version)
 
@@ -174,7 +180,6 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     if max_depth is not None:
         assert init_depth + 6 <= max_depth, f"max_depth must be at least {init_depth + 6}"
 
-
     # creating a list with the valid available fitness functions
     valid_fitnesses = list(fitness_function_options)
 
@@ -198,7 +203,6 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     # setting the number of elites to 0 if no elitism is used
     if not elitism:
         n_elites = 0
-
 
     #   *************** SLIM_GSGP_PI_INIT ***************
     TERMINALS = get_terminals(X_train)
@@ -233,9 +237,9 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     slim_gsgp_parameters["p_m"] = 1 - slim_gsgp_parameters["p_xo"]
     slim_gsgp_parameters["pop_size"] = pop_size
     slim_gsgp_parameters["inflate_mutator"] = inflate_mutation(
-        FUNCTIONS= slim_gsgp_pi_init["FUNCTIONS"],
-        TERMINALS= slim_gsgp_pi_init["TERMINALS"],
-        CONSTANTS= slim_gsgp_pi_init["CONSTANTS"],
+        FUNCTIONS=slim_gsgp_pi_init["FUNCTIONS"],
+        TERMINALS=slim_gsgp_pi_init["TERMINALS"],
+        CONSTANTS=slim_gsgp_pi_init["CONSTANTS"],
         two_trees=slim_gsgp_parameters['two_trees'],
         operator=slim_gsgp_parameters['operator'],
         sig=sig
@@ -253,7 +257,6 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     else:
         slim_gsgp_parameters["selector"] = tournament_selection_max(tournament_size)
         slim_gsgp_parameters["find_elit_func"] = get_best_max
-
 
     #   *************** SLIM_GSGP_SOLVE_PARAMETERS ***************
 
@@ -306,7 +309,6 @@ if __name__ == "__main__":
     from slim_gsgp.datasets.data_loader import load_resid_build_sale_price
     from slim_gsgp.utils.utils import train_test_split, show_individual
 
-
     for ds in ["resid_build_sale_price"]:
 
         for s in range(30):
@@ -316,16 +318,16 @@ if __name__ == "__main__":
             X_train, X_test, y_train, y_test = train_test_split(X, y, p_test=0.4, seed=s)
             X_val, X_test, y_val, y_test = train_test_split(X_test, y_test, p_test=0.5, seed=s)
 
-            #X_train, X_val, y_train, y_val = train_test_split(X, y, p_test=0.3, seed=s)
+            # X_train, X_val, y_train, y_val = train_test_split(X, y, p_test=0.3, seed=s)
 
             for algorithm in ["SLIM+SIG2", "SLIM*SIG2", "SLIM+ABS", "SLIM*ABS", "SLIM+SIG1", "SLIM*SIG1"]:
-
                 final_tree = slim(X_train=X_train, y_train=y_train, X_test=X_val, y_test=y_val,
-                                  dataset_name=ds, slim_version=algorithm, max_depth=None, pop_size=100, n_iter=10, seed=s, p_inflate=0.2,
-                                log_path=os.path.join(os.getcwd(),
-                                                                "log", f"test_{ds}-size.csv"),
-                                   reconstruct=True, n_jobs=1)
+                                  dataset_name=ds, slim_version=algorithm, max_depth=None, pop_size=100, n_iter=10,
+                                  seed=s, p_inflate=0.2,
+                                  log_path=os.path.join(os.getcwd(),
+                                                        "log", f"test_{ds}-size.csv"),
+                                  reconstruct=True, n_jobs=1)
 
-                #print(show_individual(final_tree, operator='sum'))
-                #predictions = final_tree.predict(data=X_test, slim_version=algorithm)
-                #print(float(rmse(y_true=y_test, y_pred=predictions)))
+                # print(show_individual(final_tree, operator='sum'))
+                # predictions = final_tree.predict(data=X_test, slim_version=algorithm)
+                # print(float(rmse(y_true=y_test, y_pred=predictions)))

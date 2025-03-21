@@ -5,6 +5,17 @@ from datetime import datetime
 from slim_gsgp.utils.utils import create_result_directory
 
 
+def preprocess_tree_structure(node):
+    if isinstance(node, tuple):
+        return tuple([preprocess_tree_structure(child) for child in node])
+    elif isinstance(node, list):
+        return [preprocess_tree_structure(child) for child in node]
+    elif callable(node):
+        return f"func:{node.__name__}" if hasattr(node, '__name__') else "func"
+    else:
+        return node
+
+
 def parse_tree_string(tree_str):
     """Parse a tree string into a nested structure."""
     # Remove newlines and extra whitespace
@@ -115,12 +126,15 @@ def visualize_gp_tree(tree_structure, filename='gp_tree', format='png', dataset=
         Path to the generated visualization file
     """
 
+    processed_tree = preprocess_tree_structure(tree_structure)
+
     # Create a visualization
     dot = Digraph(comment='GP Tree Visualization')
     dot.attr('node', shape='box', style='filled')
 
     node_count = [0]
 
+    # Modified add_nodes function for visualize_gp_tree in tree_visualizer.py
     def add_nodes(node, parent_id=None):
         if node is None:
             return None
@@ -144,8 +158,17 @@ def visualize_gp_tree(tree_structure, filename='gp_tree', format='png', dataset=
                 child_id = add_nodes(child, current_id)
                 if child_id:
                     dot.edge(current_id, child_id)
+        elif callable(node):  # Function object
+            # Handle function objects by using their name without the <locals> part
+            if hasattr(node, '__name__'):
+                func_name = node.__name__
+            else:
+                func_name = "function"
+            dot.node(current_id, func_name, fillcolor='orange')
         else:  # Terminal node
-            dot.node(current_id, str(node), fillcolor='lightyellow')
+            # Sanitize the string representation to remove any HTML-like elements
+            node_str = str(node).replace('<', '&lt;').replace('>', '&gt;')
+            dot.node(current_id, node_str, fillcolor='lightyellow')
 
         return current_id
 

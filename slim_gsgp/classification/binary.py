@@ -30,6 +30,9 @@ from typing import Any, Dict, Union
 
 from .metrics import calculate_binary_metrics
 from .utils import modified_sigmoid, binary_sign_transform, register_classification_fitness_functions
+from ..main_gp import gp
+from ..main_gsgp import gsgp
+from ..main_slim import slim
 
 # Type alias for model instances
 GPModel = Any  # Any of GP, GSGP, or SLIM models
@@ -196,18 +199,18 @@ def train_binary_classifier(X_train, y_train, X_val=None, y_val=None, algorithm=
 
     # Select the algorithm
     if algorithm.lower() == 'gp':
-        from slim_gsgp.main_gp import gp
         model = gp(X_train=X_train, y_train=y_train, X_test=X_val, y_test=y_val,
                    fitness_function=fitness_function, **kwargs)
     elif algorithm.lower() == 'gsgp':
-        from slim_gsgp.main_gsgp import gsgp
         # Ensure reconstruct=True for GSGP to enable predict method
         if 'reconstruct' not in kwargs:
             kwargs['reconstruct'] = True
+
+        kwargs = {k: v for k, v in kwargs.items() if k != 'max_depth'}
+
         model = gsgp(X_train=X_train, y_train=y_train, X_test=X_val, y_test=y_val,
                      fitness_function=fitness_function, **kwargs)
     elif algorithm.lower() == 'slim':
-        from slim_gsgp.main_slim import slim
         model = slim(X_train=X_train, y_train=y_train, X_test=X_val, y_test=y_val,
                      fitness_function=fitness_function, **kwargs)
     else:

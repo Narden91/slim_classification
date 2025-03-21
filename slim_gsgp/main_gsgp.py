@@ -166,13 +166,6 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     # assuring the p_xo is valid
     assert 0 <= p_xo <= 1, "p_xo must be a number between 0 and 1"
 
-    valid_fitnesses = list(fitness_function_options)
-
-    # assuring the chosen fitness_function is valid
-    assert fitness_function.lower() in valid_fitnesses.keys(), \
-        "fitness function must be: " + f"{', '.join(valid_fitnesses[:-1])} or {valid_fitnesses[-1]}" \
-            if len(valid_fitnesses) > 1 else valid_fitnesses[0]
-
     # creating a list with the valid available fitness functions
     valid_fitnesses = list(fitness_function_options)
 

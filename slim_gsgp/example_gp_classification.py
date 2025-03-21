@@ -53,7 +53,7 @@ def main():
     dataset = 'breast_cancer'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
     algo = 'gp'  # Options: 'gp', 'gsgp', 'slim'
     pop_size = 50  # Integer
-    n_iter = 20  # Integer
+    n_iter = 10  # Integer
     seed = 42  # Integer
     use_sigmoid = True  # Whether to use sigmoid activation
     sigmoid_scale = 1.0  # Scaling factor for sigmoid

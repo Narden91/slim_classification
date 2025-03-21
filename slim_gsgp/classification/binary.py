@@ -20,125 +20,19 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 """
-Binary Classification Utilities for GP-based methods (GP, GSGP, SLIM).
+Binary Classification module for SLIM-GSGP.
 
-This module provides functions for adapting regression-based GP variants to
-binary classification problems.
+This module provides tools for binary classification using GP, GSGP, or SLIM models.
 """
 
 import torch
-from typing import Callable, Union, Any
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from typing import Any, Dict, Union
 
-from slim_gsgp.main_gp import gp
-from slim_gsgp.main_gsgp import gsgp
-from slim_gsgp.main_slim import slim
-
-from slim_gsgp.config.gp_config import fitness_function_options as gp_fitness
-from slim_gsgp.config.gsgp_config import fitness_function_options as gsgp_fitness
-from slim_gsgp.config.slim_config import fitness_function_options as slim_fitness
-from slim_gsgp.evaluators.fitness_functions import rmse, mse, mae
+from .metrics import calculate_binary_metrics
+from .utils import modified_sigmoid, binary_sign_transform, register_classification_fitness_functions
 
 # Type alias for model instances
 GPModel = Any  # Any of GP, GSGP, or SLIM models
-
-
-def modified_sigmoid(scaling_factor: float = 1.0) -> Callable[[torch.Tensor], torch.Tensor]:
-    """
-    Creates a scaled sigmoid function for transforming outputs.
-
-    Parameters
-    ----------
-    scaling_factor : float
-        Controls the steepness of the sigmoid curve. Higher values make the transition
-        between 0 and 1 more abrupt.
-
-    Returns
-    -------
-    Callable
-        A sigmoid function with specified scaling factor.
-    """
-
-    def sigmoid_func(tensor: torch.Tensor) -> torch.Tensor:
-        return torch.div(
-            1.0,
-            torch.add(1.0, torch.exp(torch.mul(-scaling_factor, tensor)))
-        )
-
-    return sigmoid_func
-
-
-def binary_threshold_transform(tensor: torch.Tensor, threshold: float = 0.5) -> torch.Tensor:
-    """
-    Transforms a tensor to binary values based on a threshold.
-
-    Parameters
-    ----------
-    tensor : torch.Tensor
-        The input tensor to transform.
-    threshold : float
-        The threshold value for binarization (default: 0.5)
-
-    Returns
-    -------
-    torch.Tensor
-        Tensor containing 0s and 1s based on threshold comparison.
-    """
-    return (tensor >= threshold).float()
-
-
-def binary_sign_transform(tensor: torch.Tensor) -> torch.Tensor:
-    """
-    Transforms a tensor to binary values based on sign.
-
-    Parameters
-    ----------
-    tensor : torch.Tensor
-        The input tensor to transform.
-
-    Returns
-    -------
-    torch.Tensor
-        Tensor containing 0s and 1s (0 for negative, 1 for non-negative).
-    """
-    return (tensor >= 0).float()
-
-
-def create_binary_fitness_function(base_fitness_func: Callable,
-                                   transform_func: Callable = None,
-                                   scaling_factor: float = 1.0) -> Callable:
-    """
-    Creates a fitness function for binary classification by wrapping a base fitness function.
-
-    Parameters
-    ----------
-    base_fitness_func : Callable
-        Base fitness function (e.g., rmse, mse).
-    transform_func : Callable, optional
-        Function to transform outputs before fitness calculation.
-        If None, a sigmoid function with the specified scaling factor is used.
-    scaling_factor : float
-        Scaling factor for the sigmoid function (if transform_func is None).
-
-    Returns
-    -------
-    Callable
-        The wrapped fitness function for binary classification.
-    """
-    if transform_func is None:
-        transform_func = modified_sigmoid(scaling_factor)
-
-    def binary_fitness(y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
-        # Ensure y_true is float type
-        y_true = y_true.float() if isinstance(y_true, torch.Tensor) else torch.tensor(y_true, dtype=torch.float32)
-
-        # Apply transformation to prediction
-        transformed_pred = transform_func(y_pred)
-
-        # Calculate fitness using the base function
-        return base_fitness_func(y_true, transformed_pred)
-
-    return binary_fitness
 
 
 class BinaryClassifier:
@@ -222,7 +116,7 @@ class BinaryClassifier:
             raw_preds = self.model.predict(X)
             return binary_sign_transform(raw_preds)
 
-    def evaluate(self, X: torch.Tensor, y: torch.Tensor) -> dict:
+    def evaluate(self, X: torch.Tensor, y: torch.Tensor) -> Dict[str, float]:
         """
         Evaluate the classifier on test data.
 
@@ -235,54 +129,23 @@ class BinaryClassifier:
 
         Returns
         -------
-        dict
+        Dict[str, float]
             Dictionary containing evaluation metrics.
         """
-        # Ensure y is a numpy array
-        y_np = y.cpu().numpy() if isinstance(y, torch.Tensor) else y
-
         # Make predictions
         y_pred = self.predict(X)
-        y_pred_np = y_pred.cpu().numpy() if isinstance(y_pred, torch.Tensor) else y_pred
 
         # Calculate metrics
-        metrics = {
-            'accuracy': accuracy_score(y_np, y_pred_np),
-            'precision': precision_score(y_np, y_pred_np, zero_division=0),
-            'recall': recall_score(y_np, y_pred_np, zero_division=0),
-            'f1': f1_score(y_np, y_pred_np, zero_division=0)
-        }
-
-        return metrics
+        return calculate_binary_metrics(y, y_pred)
 
     def print_tree_representation(self):
         """
-        Print the tree representation.
+        Print the tree representation of the underlying model.
         """
-        self.model.print_tree_representation()
-
-
-def register_binary_fitness_functions():
-    """
-    Register binary fitness functions with the fitness function options dictionaries.
-
-    This function adds binary classification fitness functions to the fitness function
-    options dictionaries in the GP, GSGP, and SLIM config modules.
-
-    Returns
-    -------
-    None
-    """
-    # Create binary versions of common fitness functions
-    binary_rmse = create_binary_fitness_function(rmse)
-    binary_mse = create_binary_fitness_function(mse)
-    binary_mae = create_binary_fitness_function(mae)
-
-    # Register with each dictionary
-    for fitness_dict in [gp_fitness, gsgp_fitness, slim_fitness]:
-        fitness_dict['binary_rmse'] = binary_rmse
-        fitness_dict['binary_mse'] = binary_mse
-        fitness_dict['binary_mae'] = binary_mae
+        if hasattr(self.model, 'print_tree_representation'):
+            self.model.print_tree_representation()
+        else:
+            print("Tree representation not available for this model type")
 
 
 def train_binary_classifier(X_train, y_train, X_val=None, y_val=None, algorithm='gp',
@@ -320,7 +183,7 @@ def train_binary_classifier(X_train, y_train, X_val=None, y_val=None, algorithm=
         Trained binary classifier.
     """
     # Register fitness functions
-    register_binary_fitness_functions()
+    register_classification_fitness_functions()
 
     # Ensure binary labels
     if len(torch.unique(y_train)) > 2:
@@ -333,14 +196,18 @@ def train_binary_classifier(X_train, y_train, X_val=None, y_val=None, algorithm=
 
     # Select the algorithm
     if algorithm.lower() == 'gp':
+        from slim_gsgp.main_gp import gp
         model = gp(X_train=X_train, y_train=y_train, X_test=X_val, y_test=y_val,
                    fitness_function=fitness_function, **kwargs)
     elif algorithm.lower() == 'gsgp':
+        from slim_gsgp.main_gsgp import gsgp
         # Ensure reconstruct=True for GSGP to enable predict method
-        kwargs['reconstruct'] = True
+        if 'reconstruct' not in kwargs:
+            kwargs['reconstruct'] = True
         model = gsgp(X_train=X_train, y_train=y_train, X_test=X_val, y_test=y_val,
                      fitness_function=fitness_function, **kwargs)
     elif algorithm.lower() == 'slim':
+        from slim_gsgp.main_slim import slim
         model = slim(X_train=X_train, y_train=y_train, X_test=X_val, y_test=y_val,
                      fitness_function=fitness_function, **kwargs)
     else:

@@ -11,4 +11,6 @@ slim_gsgp.egg-info/*
 *.pyc
 /log
 *.csv
+results/*
+slim_gsgp/wandb/*
 

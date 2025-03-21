@@ -1,3 +1,20 @@
+"""
+Binary Classification Example with W&B Support
+
+This module provides a modular implementation for running binary classification experiments
+with optional Weights & Biases (W&B) integration for tracking and visualization.
+
+The module is organized into several components:
+- Experiment configuration and execution
+- Results tracking and metrics collection
+- Visualization utilities
+- W&B integration
+- Command-line interface
+
+Example usage:
+    python binary_classification_wandb.py --use-wandb=True --dataset=breast_cancer --algorithm=gp --num-runs=3
+"""
+
 import time
 import os
 import csv
@@ -7,7 +24,7 @@ import pandas as pd
 import argparse
 import wandb
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 
 from slim_gsgp.utils.utils import train_test_split, create_result_directory
 from slim_gsgp.datasets.data_loader import load_classification_dataset
@@ -19,6 +36,106 @@ from slim_gsgp.classification import (
 )
 from slim_gsgp.tree_visualizer import visualize_gp_tree
 
+
+# ===== Experiment Configuration Functions =====
+
+def setup_experiment_params(
+        dataset: str,
+        algorithm: str,
+        pop_size: int,
+        n_iter: int,
+        max_depth: int,
+        seed: int
+) -> Dict[str, Any]:
+    """
+    Set up experiment parameters based on the algorithm type and other settings.
+
+    Parameters
+    ----------
+    dataset : str
+        Dataset name
+    algorithm : str
+        Algorithm to use (gp, gsgp, slim)
+    pop_size : int
+        Population size
+    n_iter : int
+        Number of iterations
+    max_depth : int
+        Maximum tree depth
+    seed : int
+        Random seed
+
+    Returns
+    -------
+    Dict[str, Any]
+        Dictionary of algorithm-specific parameters
+    """
+    # Set common algorithm parameters
+    algo_params = {
+        'pop_size': pop_size,
+        'n_iter': n_iter,
+        'seed': seed,
+        'dataset_name': dataset,
+        'max_depth': max_depth,
+    }
+
+    # Create log directory if needed
+    log_dir = os.path.join(os.getcwd(), "log")
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    # Set algorithm-specific parameters
+    if algorithm == 'gsgp':
+        # For GSGP, ensure reconstruct=True to enable prediction
+        algo_params['reconstruct'] = True
+        algo_params['ms_lower'] = 0
+        algo_params['ms_upper'] = 1
+        algo_params['log_path'] = os.path.join(log_dir, f"gsgp_{seed}.csv")
+    elif algorithm == 'slim':
+        # For SLIM, set appropriate version
+        algo_params['slim_version'] = 'SLIM+ABS'
+        algo_params['p_inflate'] = 0.5
+        algo_params['ms_lower'] = 0
+        algo_params['ms_upper'] = 1
+        algo_params['log_path'] = os.path.join(log_dir, f"slim_{seed}.csv")
+
+    return algo_params
+
+
+def load_and_split_dataset(
+        dataset: str,
+        seed: int
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]:
+    """
+    Load a dataset and split it into train, validation, and test sets.
+
+    Parameters
+    ----------
+    dataset : str
+        Dataset name to load
+    seed : int
+        Random seed for reproducible splits
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]
+        X_train, X_val, X_test, y_train, y_val, y_test, n_classes
+    """
+    # Load dataset
+    X, y, n_classes, class_labels = load_classification_dataset(dataset)
+
+    # Check if dataset is binary
+    if n_classes != 2:
+        raise ValueError(f"This example is for binary classification only. Dataset {dataset} has {n_classes} classes.")
+
+    # Split the data into train, validation, and test sets
+    X_train, X_temp, y_train, y_temp = train_test_split(X, y, p_test=0.3, seed=seed)
+    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, p_test=0.5, seed=seed)
+
+    return X_train, X_val, X_test, y_train, y_val, y_test, n_classes
+
+
+# ===== Experiment Execution Functions =====
 
 def run_single_experiment(
         dataset: str,
@@ -40,7 +157,7 @@ def run_single_experiment(
         verbose: bool = True,
         save_visualization: bool = True,
         run_index: Optional[int] = None,
-        wandb_run: Optional[Any] = None,  # Add wandb_run parameter
+        wandb_run: Optional[Any] = None,
 ) -> Tuple[Dict[str, Any], float, str, Optional[str]]:
     """
     Run a single binary classification experiment with optional W&B logging.
@@ -96,61 +213,23 @@ def run_single_experiment(
     # Set random seed
     torch.manual_seed(seed)
 
-    # Label for run identifier (for logging)
+    # Create run identifier for logging
     run_label = f"Run {run_index}" if run_index is not None else f"Seed {seed}"
-    run_prefix = f"run_{run_index}" if run_index is not None else f"seed_{seed}"
 
+    # Log experiment parameters
     if verbose:
-        print(f"\n{'=' * 60}")
-        print(f"{run_label}: Running binary classification with {algorithm.upper()} on {dataset}")
-        print(f"{'=' * 60}")
-        print(f"Parameters:")
-        print(f"  Population size: {pop_size}")
-        print(f"  Iterations: {n_iter}")
-        print(f"  Seed: {seed}")
-        print(f"  Fitness function: {fitness_function}")
-        print(f"  Use sigmoid: {use_sigmoid}")
-        print(f"  Sigmoid scale: {sigmoid_scale}")
-        print(f"  Max depth: {max_depth}")
-        print()
+        print_experiment_params(
+            run_label, dataset, algorithm, pop_size, n_iter,
+            seed, fitness_function, use_sigmoid, sigmoid_scale, max_depth
+        )
 
-    # Set algorithm-specific parameters
-    algo_params = {
-        'pop_size': pop_size,
-        'n_iter': n_iter,
-        'seed': seed,
-        'dataset_name': dataset,
-        'max_depth': max_depth,
-    }
-
-    # Create log directory if needed
-    log_dir = os.path.join(root_dir, "log")
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-
-    if algorithm == 'gsgp':
-        # For GSGP, ensure reconstruct=True to enable prediction
-        algo_params['reconstruct'] = True
-        algo_params['ms_lower'] = 0
-        algo_params['ms_upper'] = 1
-        algo_params['log_path'] = os.path.join(log_dir, f"gsgp_{seed}.csv")
-    elif algorithm == 'slim':
-        # For SLIM, set appropriate version
-        algo_params['slim_version'] = 'SLIM+ABS'
-        algo_params['p_inflate'] = 0.5
-        algo_params['ms_lower'] = 0
-        algo_params['ms_upper'] = 1
-        algo_params['log_path'] = os.path.join(log_dir, f"slim_{seed}.csv")
-
-    # Log run start to wandb if available
-    if wandb_run is not None:
-        wandb_run.log({f"{run_prefix}/training_started": True})
-        if verbose:
-            print(f"{run_label}: Logging to Weights & Biases")
+    # Set up algorithm parameters
+    algo_params = setup_experiment_params(
+        dataset, algorithm, pop_size, n_iter, max_depth, seed
+    )
 
     # Train the classifier
     start_time = time.time()
-
     if verbose:
         print(f"{run_label}: Training binary classifier...")
 
@@ -168,27 +247,175 @@ def run_single_experiment(
 
     training_time = time.time() - start_time
 
+    # Log training completion
     if verbose:
         print(f"{run_label}: Training completed in {training_time:.2f} seconds")
-        print()
         print(f"{run_label}: Evaluating on test set:")
 
-    # Evaluate on test set
+    # Evaluate model
     metrics = model.evaluate(X_test, y_test)
 
-    # Print metrics if verbose
+    # Print metrics
     if verbose:
-        for name, value in metrics.items():
-            if name != 'confusion_matrix':
-                print(f"{name}: {value:.4f}")
+        print_metrics(metrics)
 
-        # Print confusion matrix
-        print("\nConfusion Matrix:")
-        cm = metrics['confusion_matrix']
-        print(f"[{cm[0, 0]}, {cm[0, 1]}]")
-        print(f"[{cm[1, 0]}, {cm[1, 1]}]")
+    # Save metrics to CSV
+    metrics_file = save_experiment_metrics(
+        metrics, training_time, dataset, algorithm, root_dir,
+        pop_size, n_iter, seed, use_sigmoid, sigmoid_scale,
+        fitness_function, max_depth, run_index, verbose, run_label
+    )
 
-    # Save metrics to CSV file
+    # Create visualization if requested
+    vis_path = None
+    if save_visualization:
+        vis_path = create_visualization(
+            model, dataset, algorithm, root_dir,
+            run_index, seed, verbose, run_label
+        )
+
+    # Log metrics to W&B if enabled
+    if wandb_run is not None:
+        log_to_wandb(
+            wandb_run, metrics, training_time,
+            seed, run_index, vis_path
+        )
+
+    return metrics, training_time, metrics_file, vis_path
+
+
+def print_experiment_params(
+        run_label: str,
+        dataset: str,
+        algorithm: str,
+        pop_size: int,
+        n_iter: int,
+        seed: int,
+        fitness_function: str,
+        use_sigmoid: bool,
+        sigmoid_scale: float,
+        max_depth: int
+) -> None:
+    """
+    Print experiment parameters in a readable format.
+
+    Parameters
+    ----------
+    run_label : str
+        Label for the current run
+    dataset : str
+        Dataset name
+    algorithm : str
+        Algorithm name
+    pop_size : int
+        Population size
+    n_iter : int
+        Number of iterations
+    seed : int
+        Random seed
+    fitness_function : str
+        Fitness function name
+    use_sigmoid : bool
+        Whether to use sigmoid activation
+    sigmoid_scale : float
+        Sigmoid scaling factor
+    max_depth : int
+        Maximum tree depth
+    """
+    print(f"\n{'=' * 60}")
+    print(f"{run_label}: Running binary classification with {algorithm.upper()} on {dataset}")
+    print(f"{'=' * 60}")
+    print(f"Parameters:")
+    print(f"  Population size: {pop_size}")
+    print(f"  Iterations: {n_iter}")
+    print(f"  Seed: {seed}")
+    print(f"  Fitness function: {fitness_function}")
+    print(f"  Use sigmoid: {use_sigmoid}")
+    print(f"  Sigmoid scale: {sigmoid_scale}")
+    print(f"  Max depth: {max_depth}")
+    print()
+
+
+def print_metrics(metrics: Dict[str, Any]) -> None:
+    """
+    Print metrics in a readable format.
+
+    Parameters
+    ----------
+    metrics : Dict[str, Any]
+        Dictionary of metrics to print
+    """
+    for name, value in metrics.items():
+        if name != 'confusion_matrix':
+            print(f"{name}: {value:.4f}")
+
+    # Print confusion matrix
+    print("\nConfusion Matrix:")
+    cm = metrics['confusion_matrix']
+    print(f"[{cm[0, 0]}, {cm[0, 1]}]")
+    print(f"[{cm[1, 0]}, {cm[1, 1]}]")
+
+
+# ===== Results and Metrics Functions =====
+
+def save_experiment_metrics(
+        metrics: Dict[str, Any],
+        training_time: float,
+        dataset: str,
+        algorithm: str,
+        root_dir: str,
+        pop_size: int,
+        n_iter: int,
+        seed: int,
+        use_sigmoid: bool,
+        sigmoid_scale: float,
+        fitness_function: str,
+        max_depth: int,
+        run_index: Optional[int],
+        verbose: bool,
+        run_label: str
+) -> str:
+    """
+    Save metrics from an experiment to a CSV file.
+
+    Parameters
+    ----------
+    metrics : Dict[str, Any]
+        Dictionary of metrics to save
+    training_time : float
+        Time taken for training
+    dataset : str
+        Dataset name
+    algorithm : str
+        Algorithm used
+    root_dir : str
+        Project root directory
+    pop_size : int
+        Population size
+    n_iter : int
+        Number of iterations
+    seed : int
+        Random seed
+    use_sigmoid : bool
+        Whether sigmoid activation was used
+    sigmoid_scale : float
+        Sigmoid scaling factor
+    fitness_function : str
+        Fitness function used
+    max_depth : int
+        Maximum tree depth
+    run_index : int, optional
+        Index of the current run
+    verbose : bool
+        Whether to print verbose output
+    run_label : str
+        Label for the current run
+
+    Returns
+    -------
+    str
+        Path to the saved metrics file
+    """
     additional_info = {
         'pop_size': pop_size,
         'n_iter': n_iter,
@@ -212,105 +439,7 @@ def run_single_experiment(
     if verbose:
         print(f"\n{run_label}: Metrics saved to: {metrics_file}")
 
-    # Visualization path (if visualization is created)
-    vis_path = None
-
-    # Try to visualize the model
-    if save_visualization:
-        try:
-            # Create visualization directory
-            vis_dir = create_result_directory(
-                root_dir=root_dir,
-                dataset=dataset,
-                algorithm=algorithm,
-                result_type="visualizations"
-            )
-
-            if verbose:
-                print(f"\n{run_label}: Tree text representation:")
-                model.print_tree_representation()
-
-            # Create a unique filename for the visualization
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            run_suffix = f"run_{run_index}" if run_index is not None else f"seed_{seed}"
-            filename_visualization = f"classification_{run_suffix}_{timestamp}"
-
-            # Try to extract and visualize the tree
-            if hasattr(model.model, 'repr_'):
-                # For GP models
-                tree_structure = model.model.repr_
-                vis_path = os.path.join(vis_dir, filename_visualization)
-                visualize_gp_tree(tree_structure, vis_path, 'png')
-                if verbose:
-                    print(f"{run_label}: Tree visualization saved to {vis_path}.png")
-            elif hasattr(model.model, 'structure'):
-                # For GSGP models
-                tree_structure = model.model.structure
-                vis_path = os.path.join(vis_dir, filename_visualization)
-                visualize_gp_tree(tree_structure, vis_path, 'png')
-                if verbose:
-                    print(f"{run_label}: Tree visualization saved to {vis_path}.png")
-            elif hasattr(model.model, 'collection'):
-                # For SLIM models
-                tree_structure = [t.structure for t in model.model.collection]
-                vis_path = os.path.join(vis_dir, filename_visualization)
-                visualize_gp_tree(tree_structure, vis_path, 'png')
-                if verbose:
-                    print(f"{run_label}: Tree visualization saved to {vis_path}.png")
-        except Exception as e:
-            if verbose:
-                print(f"{run_label}: Could not visualize the model: {str(e)}")
-            vis_path = None
-
-    # Log metrics and artifacts to wandb if available
-    if wandb_run is not None:
-        # Store metrics in run config for later summary
-        if 'run_metrics' not in wandb_run.config:
-            wandb_run.config.update({'run_metrics': {}}, allow_val_change=True)
-
-        # Store metrics in a dictionary for later summarization
-        run_metrics = {}
-        for name, value in metrics.items():
-            if name != 'confusion_matrix' and not isinstance(value, (list, np.ndarray)):
-                run_metrics[name] = float(value)
-
-        # Add run index and training time
-        run_metrics['run_index'] = run_index if run_index is not None else 1
-        run_metrics['training_time'] = training_time
-        run_metrics['seed'] = seed
-
-        # Update wandb config with the metrics
-        wandb_run.config.run_metrics[f"run_{run_index}"] = run_metrics
-
-        # Log confusion matrix as a wandb plot
-        if "confusion_matrix" in metrics:
-            cm = metrics['confusion_matrix']
-            preds = model.predict(X_test).cpu().numpy()
-            y_true = y_test.cpu().numpy()
-
-            # Create a confusion matrix plot
-            cm_plot = wandb.plot.confusion_matrix(
-                preds=preds.astype(int).tolist(),
-                y_true=y_true.astype(int).tolist(),
-                class_names=["Negative", "Positive"]
-            )
-            wandb_run.log({f"run_{run_index}/confusion_matrix": cm_plot})
-
-        # Save tree visualization as an artifact
-        if vis_path:
-            artifact = wandb.Artifact(
-                name=f"tree_viz_{dataset}_{algorithm}_run_{run_index}",
-                type="tree_visualization"
-            )
-            artifact.add_file(f"{vis_path}.png")
-            wandb_run.log_artifact(artifact)
-
-            # Also log the image directly for easy viewing
-            wandb_run.log({
-                f"run_{run_index}/tree_visualization": wandb.Image(f"{vis_path}.png")
-            })
-
-    return metrics, training_time, metrics_file, vis_path
+    return metrics_file
 
 
 def save_unified_metrics(
@@ -323,8 +452,7 @@ def save_unified_metrics(
         root_dir: str
 ) -> str:
     """
-    Save all metrics from multiple runs to a single CSV file with one row per run
-    and a final row with mean values.
+    Save unified metrics from multiple runs to a single CSV file.
 
     Parameters
     ----------
@@ -346,7 +474,7 @@ def save_unified_metrics(
     Returns
     -------
     str
-        Path to the saved metrics file
+        Path to the saved unified metrics file
     """
     # Create metrics directory
     metrics_dir = create_result_directory(
@@ -402,6 +530,43 @@ def save_unified_metrics(
         rows.append(row)
 
     # Add a row with mean values
+    mean_row = create_mean_metrics_row(rows, dataset, algorithm, training_times, run_params)
+    rows.append(mean_row)
+
+    # Write to CSV
+    write_metrics_to_csv(rows, summary_path)
+
+    return summary_path
+
+
+def create_mean_metrics_row(
+        rows: List[Dict[str, Any]],
+        dataset: str,
+        algorithm: str,
+        training_times: List[float],
+        run_params: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Create a row with mean values for metrics across all runs.
+
+    Parameters
+    ----------
+    rows : List[Dict[str, Any]]
+        List of metric rows from individual runs
+    dataset : str
+        Dataset name
+    algorithm : str
+        Algorithm used
+    training_times : List[float]
+        List of training times for all runs
+    run_params : Dict[str, Any]
+        Parameters for the runs
+
+    Returns
+    -------
+    Dict[str, Any]
+        Row with mean values
+    """
     mean_row = {
         'run_index': 'mean',
         'seed': 'N/A',
@@ -428,39 +593,579 @@ def save_unified_metrics(
             if values:
                 mean_row[key] = np.mean(values)
 
-    # Add the mean row
-    rows.append(mean_row)
+    return mean_row
 
-    # Write to CSV
+
+def write_metrics_to_csv(rows: List[Dict[str, Any]], file_path: str) -> None:
+    """
+    Write metrics rows to a CSV file.
+
+    Parameters
+    ----------
+    rows : List[Dict[str, Any]]
+        List of metric rows to write
+    file_path : str
+        Path to the CSV file to create
+    """
+    # Get all fieldnames from all rows
     fieldnames = list(set().union(*[row.keys() for row in rows]))
+
     # Sort fieldnames for consistent ordering
     fieldnames.sort()
+
     # Move run_index to the front
     if 'run_index' in fieldnames:
         fieldnames.remove('run_index')
         fieldnames.insert(0, 'run_index')
 
-    with open(summary_path, 'w', newline='') as csvfile:
+    # Write to CSV
+    with open(file_path, 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
 
-    return summary_path
 
-
-def main(use_wandb=False, dataset='breast_cancer', algorithm='gp', num_runs=3,
-         pop_size=50, n_iter=10, max_depth=8, seeds=None):
+def print_summary_results(
+        all_metrics: List[Dict[str, Any]],
+        all_training_times: List[float],
+        num_runs: int,
+        summary_file: str,
+        all_metrics_files: List[str] = None,
+        all_vis_paths: List[str] = None,
+        save_individual_metrics: bool = False
+) -> None:
     """
-    Main function to run the binary classification example with multiple runs
-    and optional W&B tracking.
+    Print summary results from multiple runs.
 
     Parameters
     ----------
-    use_wandb : bool
-        Whether to use Weights & Biases for tracking experiments
+    all_metrics : List[Dict[str, Any]]
+        List of metrics from all runs
+    all_training_times : List[float]
+        List of training times for all runs
+    num_runs : int
+        Number of runs executed
+    summary_file : str
+        Path to the summary metrics file
+    all_metrics_files : List[str], optional
+        List of paths to individual metrics files
+    all_vis_paths : List[str], optional
+        List of paths to visualization files
+    save_individual_metrics : bool, optional
+        Whether individual metrics files were saved
+    """
+    print("\n" + "=" * 60)
+    print(f"SUMMARY RESULTS FOR {num_runs} RUNS")
+    print("=" * 60)
+
+    # Calculate mean and standard deviation for key metrics
+    key_metrics = ['accuracy', 'precision', 'recall', 'f1']
+    for metric in key_metrics:
+        values = [float(m[metric]) for m in all_metrics if metric in m]
+        if values:
+            print(f"{metric.capitalize()}: {np.mean(values):.4f} ± {np.std(values):.4f}")
+
+    # Calculate mean and standard deviation for training time
+    print(f"Training time: {np.mean(all_training_times):.2f} ± {np.std(all_training_times):.2f} seconds")
+
+    print(f"\nUnified metrics saved to: {summary_file}")
+
+    if save_individual_metrics and all_metrics_files:
+        print(f"Individual metrics files ({len(all_metrics_files)}):")
+        for i, file_path in enumerate(all_metrics_files):
+            print(f"  Run {i + 1}: {os.path.basename(file_path)}")
+
+    # Print visualization paths if any
+    if all_vis_paths:
+        print(f"\nVisualization files ({len(all_vis_paths)}):")
+        for i, file_path in enumerate(all_vis_paths):
+            print(f"  Run {i + 1}: {os.path.basename(file_path)}.png")
+    else:
+        print("\nVisualization files (0):\n  None generated")
+
+
+# ===== Visualization Functions =====
+
+def create_visualization(
+        model: BinaryClassifier,
+        dataset: str,
+        algorithm: str,
+        root_dir: str,
+        run_index: Optional[int] = None,
+        seed: int = 42,
+        verbose: bool = True,
+        run_label: str = "Run"
+) -> Optional[str]:
+    """
+    Create a visualization of the model's tree structure.
+
+    Parameters
+    ----------
+    model : BinaryClassifier
+        The trained classifier model
     dataset : str
-        Dataset name to use (breast_cancer, iris, digits, wine)
+        Dataset name
+    algorithm : str
+        Algorithm used
+    root_dir : str
+        Project root directory
+    run_index : int, optional
+        Index of the current run
+    seed : int
+        Random seed used
+    verbose : bool
+        Whether to print verbose output
+    run_label : str
+        Label for the current run
+
+    Returns
+    -------
+    Optional[str]
+        Path to the visualization if created, None otherwise
+    """
+    try:
+        # Create visualization directory
+        vis_dir = create_result_directory(
+            root_dir=root_dir,
+            dataset=dataset,
+            algorithm=algorithm,
+            result_type="visualizations"
+        )
+
+        if verbose:
+            print(f"\n{run_label}: Tree text representation:")
+            model.print_tree_representation()
+
+        # Create a unique filename for the visualization
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_suffix = f"run_{run_index}" if run_index is not None else f"seed_{seed}"
+        filename_visualization = f"classification_{run_suffix}_{timestamp}"
+
+        # Extract tree structure based on model type
+        vis_path = None
+        if hasattr(model.model, 'repr_'):
+            # For GP models
+            tree_structure = model.model.repr_
+            vis_path = os.path.join(vis_dir, filename_visualization)
+            visualize_gp_tree(tree_structure, vis_path, 'png')
+        elif hasattr(model.model, 'structure'):
+            # For GSGP models
+            tree_structure = model.model.structure
+            vis_path = os.path.join(vis_dir, filename_visualization)
+            visualize_gp_tree(tree_structure, vis_path, 'png')
+        elif hasattr(model.model, 'collection'):
+            # For SLIM models
+            tree_structure = [t.structure for t in model.model.collection]
+            vis_path = os.path.join(vis_dir, filename_visualization)
+            visualize_gp_tree(tree_structure, vis_path, 'png')
+
+        if vis_path and verbose:
+            print(f"{run_label}: Tree visualization saved to {vis_path}.png")
+
+        return vis_path
+
+    except Exception as e:
+        if verbose:
+            print(f"{run_label}: Could not visualize the model: {str(e)}")
+        return None
+
+
+# ===== W&B Integration Functions =====
+
+def init_wandb(
+        dataset: str,
+        algorithm: str,
+        num_runs: int,
+        seeds: List[int],
+        pop_size: int,
+        n_iter: int,
+        max_depth: int,
+        use_sigmoid: bool,
+        sigmoid_scale: float,
+        fitness_function: str
+) -> Optional[Any]:
+    """
+    Initialize Weights & Biases for experiment tracking.
+
+    Parameters
+    ----------
+    dataset : str
+        Dataset name
+    algorithm : str
+        Algorithm to use
+    num_runs : int
+        Number of runs to execute
+    seeds : List[int]
+        List of random seeds
+    pop_size : int
+        Population size
+    n_iter : int
+        Number of iterations
+    max_depth : int
+        Maximum tree depth
+    use_sigmoid : bool
+        Whether to use sigmoid activation
+    sigmoid_scale : float
+        Sigmoid scaling factor
+    fitness_function : str
+        Fitness function to use
+
+    Returns
+    -------
+    Optional[Any]
+        W&B run object if initialization was successful, None otherwise
+    """
+    try:
+        wandb_run = wandb.init(
+            project="slim-gsgp-binary-classification",
+            name=f"{dataset}_{algorithm}_{num_runs}_runs",
+            config={
+                "dataset": dataset,
+                "algorithm": algorithm,
+                "num_runs": num_runs,
+                "seeds": seeds[:num_runs],
+                "pop_size": pop_size,
+                "n_iter": n_iter,
+                "max_depth": max_depth,
+                "use_sigmoid": use_sigmoid,
+                "sigmoid_scale": sigmoid_scale,
+                "fitness_function": fitness_function,
+            }
+        )
+        print(f"\nWeights & Biases initialized - tracking run at {wandb.run.url}")
+        return wandb_run
+    except Exception as e:
+        print(f"Warning: Failed to initialize Weights & Biases: {e}")
+        print("Running without W&B logging")
+        return None
+
+
+def log_to_wandb(
+        wandb_run: Any,
+        metrics: Dict[str, Any],
+        training_time: float,
+        seed: int,
+        run_index: Optional[int] = None,
+        vis_path: Optional[str] = None
+) -> None:
+    """
+    Log metrics and artifacts to W&B.
+
+    Parameters
+    ----------
+    wandb_run : Any
+        W&B run object
+    metrics : Dict[str, Any]
+        Dictionary of metrics to log
+    training_time : float
+        Training time in seconds
+    seed : int
+        Random seed used
+    run_index : int, optional
+        Index of the current run
+    vis_path : str, optional
+        Path to visualization file
+    """
+    # Store metrics in run config for later summary
+    if 'run_metrics' not in wandb_run.config:
+        wandb_run.config.update({'run_metrics': {}}, allow_val_change=True)
+
+    # Store metrics in a dictionary for later summarization
+    run_metrics = {}
+    for name, value in metrics.items():
+        if name != 'confusion_matrix' and not isinstance(value, (list, np.ndarray)):
+            run_metrics[name] = float(value)
+
+    # Add run index and training time
+    run_metrics['run_index'] = run_index if run_index is not None else 1
+    run_metrics['training_time'] = training_time
+    run_metrics['seed'] = seed
+
+    # Update wandb config with the metrics
+    run_key = f"run_{run_index}" if run_index is not None else f"run_1"
+    wandb_run.config.run_metrics[run_key] = run_metrics
+
+    # Log confusion matrix as a wandb plot
+    if "confusion_matrix" in metrics:
+        log_confusion_matrix_to_wandb(wandb_run, metrics, run_index)
+
+    # Save tree visualization as an artifact
+    if vis_path:
+        log_visualization_to_wandb(wandb_run, vis_path, run_index)
+
+
+def log_confusion_matrix_to_wandb(
+        wandb_run: Any,
+        metrics: Dict[str, Any],
+        run_index: Optional[int] = None
+) -> None:
+    """
+    Log confusion matrix to W&B.
+
+    Parameters
+    ----------
+    wandb_run : Any
+        W&B run object
+    metrics : Dict[str, Any]
+        Dictionary of metrics containing confusion matrix
+    run_index : int, optional
+        Index of the current run
+    """
+    # Create confusion matrix labels
+    cm = metrics['confusion_matrix']
+
+    # Create mock predictions and labels for W&B format
+    preds = np.zeros(cm[0, 0] + cm[0, 1] + cm[1, 0] + cm[1, 1], dtype=int)
+    actuals = np.zeros_like(preds)
+
+    # Fill with values based on confusion matrix
+    pos = 0
+
+    # True negatives (0, 0)
+    preds[pos:pos + cm[0, 0]] = 0
+    actuals[pos:pos + cm[0, 0]] = 0
+    pos += cm[0, 0]
+
+    # False positives (0, 1)
+    preds[pos:pos + cm[0, 1]] = 1
+    actuals[pos:pos + cm[0, 1]] = 0
+    pos += cm[0, 1]
+
+    # False negatives (1, 0)
+    preds[pos:pos + cm[1, 0]] = 0
+    actuals[pos:pos + cm[1, 0]] = 1
+    pos += cm[1, 0]
+
+    # True positives (1, 1)
+    preds[pos:pos + cm[1, 1]] = 1
+    actuals[pos:pos + cm[1, 1]] = 1
+
+    # Create a confusion matrix plot
+    run_key = f"run_{run_index}" if run_index is not None else "run_1"
+    cm_plot = wandb.plot.confusion_matrix(
+        preds=preds.tolist(),
+        y_true=actuals.tolist(),
+        class_names=["Negative", "Positive"]
+    )
+    wandb_run.log({f"{run_key}/confusion_matrix": cm_plot})
+
+
+def log_visualization_to_wandb(
+        wandb_run: Any,
+        vis_path: str,
+        run_index: Optional[int] = None
+) -> None:
+    """
+    Log visualization to W&B.
+
+    Parameters
+    ----------
+    wandb_run : Any
+        W&B run object
+    vis_path : str
+        Path to visualization file
+    run_index : int, optional
+        Index of the current run
+    """
+    try:
+        # Append .png extension if not already present
+        img_path = f"{vis_path}.png" if not vis_path.endswith(".png") else vis_path
+
+        if os.path.exists(img_path):
+            run_key = f"run_{run_index}" if run_index is not None else "run_1"
+
+            # Create artifact name
+            artifact_name = f"tree_viz_run_{run_index}" if run_index is not None else "tree_viz"
+
+            # Log as artifact
+            artifact = wandb.Artifact(
+                name=artifact_name,
+                type="tree_visualization"
+            )
+            artifact.add_file(img_path)
+            wandb_run.log_artifact(artifact)
+
+            # Also log as image for easier viewing
+            wandb_run.log({
+                f"{run_key}/tree_visualization": wandb.Image(img_path)
+            })
+    except Exception as e:
+        print(f"Warning: Failed to log visualization to W&B: {e}")
+
+
+def log_summary_to_wandb(
+        wandb_run: Any,
+        all_metrics: List[Dict[str, Any]],
+        all_training_times: List[float],
+        seeds: List[int],
+        all_vis_paths: List[str]
+) -> None:
+    """
+    Log summary metrics and visualizations to W&B.
+
+    Parameters
+    ----------
+    wandb_run : Any
+        W&B run object
+    all_metrics : List[Dict[str, Any]]
+        List of metrics from all runs
+    all_training_times : List[float]
+        List of training times for all runs
+    seeds : List[int]
+        List of seeds used for each run
+    all_vis_paths : List[str]
+        List of paths to visualization files
+    """
+    try:
+        # Create summary table
+        create_summary_table(wandb_run, all_metrics, all_training_times, seeds, all_vis_paths)
+
+        # Create metrics plots
+        # create_metrics_plots(wandb_run, all_metrics, all_training_times)
+
+        # Create visualization gallery
+        if any(all_vis_paths):
+            create_visualization_gallery(wandb_run, all_metrics, seeds, all_vis_paths)
+
+        # Finish W&B run
+        wandb_run.finish()
+        print(f"\nWeights & Biases tracking completed - view results at {wandb_run.url}")
+
+    except Exception as e:
+        print(f"Warning: Error during W&B summary logging: {e}")
+        try:
+            if wandb_run is not None:
+                wandb_run.finish()
+        except:
+            pass
+
+
+def create_summary_table(
+        wandb_run: Any,
+        all_metrics: List[Dict[str, Any]],
+        all_training_times: List[float],
+        seeds: List[int],
+        all_vis_paths: List[str]
+) -> None:
+    """
+    Create a summary table of results in W&B.
+
+    Parameters
+    ----------
+    wandb_run : Any
+        W&B run object
+    all_metrics : List[Dict[str, Any]]
+        List of metrics from all runs
+    all_training_times : List[float]
+        List of training times for all runs
+    seeds : List[int]
+        List of seeds used for each run
+    all_vis_paths : List[str]
+        List of paths to visualization files
+    """
+    summary_table = wandb.Table(
+        columns=["Run", "Seed", "Accuracy", "Precision", "Recall", "F1", "Specificity",
+                 "True Positives", "True Negatives", "False Positives", "False Negatives",
+                 "Training Time (s)", "Tree Visualization"]
+    )
+
+    for i, (metrics_dict, training_time, seed) in enumerate(
+            zip(all_metrics, all_training_times, seeds)):
+
+        # Get the visualization for this run
+        tree_image = None
+        if i < len(all_vis_paths) and all_vis_paths[i]:
+            try:
+                # Append .png extension if not already present
+                img_path = f"{all_vis_paths[i]}.png" if not all_vis_paths[i].endswith(".png") else all_vis_paths[i]
+                if os.path.exists(img_path):
+                    tree_image = wandb.Image(img_path, caption=f"Run {i + 1} Tree")
+            except Exception as e:
+                print(f"Error loading visualization for run {i + 1}: {str(e)}")
+
+        # Add row to summary table
+        summary_table.add_data(
+            i + 1,
+            seed,
+            float(metrics_dict.get("accuracy", 0)),
+            float(metrics_dict.get("precision", 0)),
+            float(metrics_dict.get("recall", 0)),
+            float(metrics_dict.get("f1", 0)),
+            float(metrics_dict.get("specificity", 0)),
+            int(metrics_dict.get("true_positives", 0)),
+            int(metrics_dict.get("true_negatives", 0)),
+            int(metrics_dict.get("false_positives", 0)),
+            int(metrics_dict.get("false_negatives", 0)),
+            training_time,
+            tree_image
+        )
+
+    # Log the summary table to wandb
+    wandb_run.log({"Results Summary": summary_table})
+
+
+def create_visualization_gallery(
+        wandb_run: Any,
+        all_metrics: List[Dict[str, Any]],
+        seeds: List[int],
+        all_vis_paths: List[str]
+) -> None:
+    """
+    Create a gallery of visualizations in W&B.
+
+    Parameters
+    ----------
+    wandb_run : Any
+        W&B run object
+    all_metrics : List[Dict[str, Any]]
+        List of metrics from all runs
+    seeds : List[int]
+        List of seeds used for each run
+    all_vis_paths : List[str]
+        List of paths to visualization files
+    """
+    viz_panel = {}
+    for i, vis_path in enumerate(all_vis_paths):
+        if vis_path:
+            img_path = f"{vis_path}.png" if not vis_path.endswith(".png") else vis_path
+            if os.path.exists(img_path):
+                seed_val = seeds[i] if i < len(seeds) else 'N/A'
+                acc_val = all_metrics[i].get('accuracy', 0) if i < len(all_metrics) else 0
+                viz_panel[f"Tree_Run_{i + 1}"] = wandb.Image(
+                    img_path,
+                    caption=f"Run {i + 1} (Seed: {seed_val}, Accuracy: {acc_val:.4f})"
+                )
+
+    if viz_panel:
+        wandb_run.log({"Tree Visualizations Gallery": viz_panel})
+
+
+# ===== Main Function =====
+
+def run_experiments(
+        dataset: str = 'breast_cancer',
+        algorithm: str = 'gp',
+        num_runs: int = 3,
+        pop_size: int = 50,
+        n_iter: int = 10,
+        max_depth: int = 8,
+        use_sigmoid: bool = True,
+        sigmoid_scale: float = 1.0,
+        fitness_function: str = 'binary_rmse',
+        seeds: Optional[List[int]] = None,
+        use_wandb: bool = False,
+        save_visualization: bool = True,
+        save_individual_metrics: bool = False,
+        verbose_individual_runs: bool = True
+) -> Tuple[List[Dict[str, Any]], List[float], str]:
+    """
+    Run multiple binary classification experiments with optional W&B tracking.
+
+    Parameters
+    ----------
+    dataset : str
+        Dataset name to use
     algorithm : str
         Algorithm to use (gp, gsgp, slim)
     num_runs : int
@@ -471,63 +1176,35 @@ def main(use_wandb=False, dataset='breast_cancer', algorithm='gp', num_runs=3,
         Number of iterations for GP algorithm
     max_depth : int
         Maximum depth of GP trees
-    seeds : list
+    use_sigmoid : bool
+        Whether to use sigmoid activation
+    sigmoid_scale : float
+        Scaling factor for sigmoid
+    fitness_function : str
+        Fitness function to use
+    seeds : List[int], optional
         List of random seeds for reproducibility
+    use_wandb : bool
+        Whether to use Weights & Biases for tracking
+    save_visualization : bool
+        Whether to save tree visualizations
+    save_individual_metrics : bool
+        Whether to save individual metrics files
+    verbose_individual_runs : bool
+        Whether to print verbose output for individual runs
+
+    Returns
+    -------
+    Tuple[List[Dict[str, Any]], List[float], str]
+        List of metrics, list of training times, and path to summary metrics file
     """
     # Get project root directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
     root_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
 
-    # Define parameters for all runs
-    dataset = 'breast_cancer'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
-    algorithm = 'gp'  # Options: 'gp', 'gsgp', 'slim'
-
-    # Run configuration
-    num_runs = 3  # Number of runs to execute
-    seeds = [42, 123, 456]  # Random seeds for each run (should match num_runs)
-
-    # Parameters for all runs
-    pop_size = 50
-    n_iter = 10
-    max_depth = 8
-    use_sigmoid = True
-    sigmoid_scale = 1.0
-    fitness_function = 'binary_rmse'
-
-    # Whether to save visualizations for each run
-    save_visualization = True
-
-    # Whether to save individual metrics files (not necessary with unified summary)
-    save_individual_metrics = False
-
-    # Verbose output for individual runs
-    verbose_individual_runs = True
-
-    # Initialize wandb if enabled
-    wandb_run = None
-    if use_wandb:
-        try:
-            wandb_run = wandb.init(
-                project="slim-gsgp-binary-classification",
-                name=f"{dataset}_{algorithm}_{num_runs}_runs",
-                config={
-                    "dataset": dataset,
-                    "algorithm": algorithm,
-                    "num_runs": num_runs,
-                    "seeds": seeds[:num_runs],
-                    "pop_size": pop_size,
-                    "n_iter": n_iter,
-                    "max_depth": max_depth,
-                    "use_sigmoid": use_sigmoid,
-                    "sigmoid_scale": sigmoid_scale,
-                    "fitness_function": fitness_function,
-                }
-            )
-            print(f"Weights & Biases initialized - tracking run at {wandb.run.url}")
-        except Exception as e:
-            print(f"Warning: Failed to initialize Weights & Biases: {e}")
-            print("Running without W&B logging")
-            use_wandb = False
+    # Set default seeds if not provided
+    if seeds is None:
+        seeds = [42, 123, 456]
 
     # Register binary fitness functions
     register_classification_fitness_functions()
@@ -536,26 +1213,24 @@ def main(use_wandb=False, dataset='breast_cancer', algorithm='gp', num_runs=3,
     print(f"Seeds: {seeds}")
     print()
 
-    # Load the dataset
-    print(f"Loading dataset: {dataset}")
-    X, y, n_classes, class_labels = load_classification_dataset(dataset)
-    print(f"Dataset shape: {X.shape}")
-    print(f"Number of classes: {n_classes}")
-    print(f"Class distribution: {torch.bincount(y).tolist()}")
-    print()
-
-    # Check if dataset is binary
-    if n_classes != 2:
-        raise ValueError(f"This example is for binary classification only. Dataset {dataset} has {n_classes} classes.")
-
-    # Split the data into train, validation, and test sets
-    X_train, X_temp, y_train, y_temp = train_test_split(X, y, p_test=0.3, seed=seeds[0])
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, p_test=0.5, seed=seeds[0])
+    # Load and split dataset
+    X_train, X_val, X_test, y_train, y_val, y_test, n_classes = load_and_split_dataset(
+        dataset, seeds[0]
+    )
 
     print(f"Train set size: {len(X_train)}")
     print(f"Validation set size: {len(X_val)}")
     print(f"Test set size: {len(X_test)}")
     print()
+
+    # Initialize wandb if enabled
+    wandb_run = None
+    if use_wandb:
+        wandb_run = init_wandb(
+            dataset, algorithm, num_runs, seeds,
+            pop_size, n_iter, max_depth, use_sigmoid,
+            sigmoid_scale, fitness_function
+        )
 
     # Run all experiments
     all_metrics = []
@@ -622,180 +1297,41 @@ def main(use_wandb=False, dataset='breast_cancer', algorithm='gp', num_runs=3,
     )
 
     # Print summary results
-    print("\n" + "=" * 60)
-    print(f"SUMMARY RESULTS FOR {num_runs} RUNS")
-    print("=" * 60)
+    print_summary_results(
+        all_metrics=all_metrics,
+        all_training_times=all_training_times,
+        num_runs=num_runs,
+        summary_file=summary_file,
+        all_metrics_files=all_metrics_files,
+        all_vis_paths=all_vis_paths,
+        save_individual_metrics=save_individual_metrics
+    )
 
-    # Calculate mean and standard deviation for key metrics
-    key_metrics = ['accuracy', 'precision', 'recall', 'f1']
-    for metric in key_metrics:
-        values = [float(m[metric]) for m in all_metrics if metric in m]
-        if values:
-            print(f"{metric.capitalize()}: {np.mean(values):.4f} ± {np.std(values):.4f}")
-
-    # Calculate mean and standard deviation for training time
-    print(f"Training time: {np.mean(all_training_times):.2f} ± {np.std(all_training_times):.2f} seconds")
-
-    print(f"\nUnified metrics saved to: {summary_file}")
-
-    if save_individual_metrics and all_metrics_files:
-        print(f"Individual metrics files ({len(all_metrics_files)}):")
-        for i, file_path in enumerate(all_metrics_files):
-            print(f"  Run {i + 1}: {os.path.basename(file_path)}")
-
-    print(f"\nVisualization files ({len(all_vis_paths)}):")
-    if all_vis_paths:
-        for i, file_path in enumerate(all_vis_paths):
-            print(f"  Run {i + 1}: {os.path.basename(file_path)}.png")
-    else:
-        print("  None generated")
-
-    # Log summary metrics and create visualizations in wandb
+    # Log summary to W&B if enabled
     if wandb_run is not None:
-        try:
-            # Create data for line plots showing trends across runs
-            run_indices = list(range(1, num_runs + 1))
-
-            # Prepare line chart data for metrics
-            metrics_data = {metric: [] for metric in key_metrics}
-            for i, metrics_dict in enumerate(all_metrics):
-                for metric in key_metrics:
-                    if metric in metrics_dict:
-                        metrics_data[metric].append([i + 1, float(metrics_dict[metric])])
-
-            # Create a single combined line chart for all metrics
-            combined_data = []
-            for metric in key_metrics:
-                for run_idx, value in metrics_data[metric]:
-                    combined_data.append([run_idx, value, metric])
-
-            if combined_data:
-                metrics_table = wandb.Table(columns=["Run", "Value", "Metric"], data=combined_data)
-                wandb_run.log({"Metrics Across Runs": wandb.plot.line(
-                    metrics_table, "Run", "Value", "Metric",
-                    title="Classification Metrics Across Runs")
-                })
-
-            # Create a bar chart for training times
-            time_data = [[i + 1, time] for i, time in enumerate(all_training_times)]
-            if time_data:
-                time_table = wandb.Table(columns=["Run", "Training Time (s)"], data=time_data)
-                wandb_run.log({"Training Time by Run": wandb.plot.bar(
-                    time_table, "Run", "Training Time (s)",
-                    title="Training Time by Run")
-                })
-
-            # Create a summary table with all run results
-            summary_table = wandb.Table(
-                columns=["Run", "Seed", "Accuracy", "Precision", "Recall", "F1", "Specificity",
-                         "True Positives", "True Negatives", "False Positives", "False Negatives", "Training Time (s)"]
-            )
-
-            for i, (metrics_dict, training_time, seed) in enumerate(
-                    zip(all_metrics, all_training_times, seeds[:num_runs])):
-                summary_table.add_data(
-                    i + 1,
-                    seed,
-                    float(metrics_dict.get("accuracy", 0)),
-                    float(metrics_dict.get("precision", 0)),
-                    float(metrics_dict.get("recall", 0)),
-                    float(metrics_dict.get("f1", 0)),
-                    float(metrics_dict.get("specificity", 0)),
-                    int(metrics_dict.get("true_positives", 0)),
-                    int(metrics_dict.get("true_negatives", 0)),
-                    int(metrics_dict.get("false_positives", 0)),
-                    int(metrics_dict.get("false_negatives", 0)),
-                    training_time
-                )
-
-            wandb_run.log({"Results Summary": summary_table})
-
-            # Create performance radar chart
-            if num_runs > 0 and all_metrics:
-                radar_data = []
-                for i, metrics_dict in enumerate(all_metrics):
-                    row = [f"Run {i + 1}"]
-                    for metric in ["accuracy", "precision", "recall", "f1"]:
-                        if metric in metrics_dict:
-                            row.append(float(metrics_dict[metric]))
-                        else:
-                            row.append(0)
-                    radar_data.append(row)
-
-                radar_table = wandb.Table(
-                    columns=["Run", "Accuracy", "Precision", "Recall", "F1"],
-                    data=radar_data
-                )
-
-                wandb_run.log({"Performance Radar": wandb.plot.line(
-                    radar_table,
-                    "Run",
-                    "Accuracy", "Precision", "Recall", "F1",
-                    title="Performance Metrics by Run")
-                })
-
-            # Create confusion matrix comparison
-            # Since we've already logged individual confusion matrices per run,
-            # we can create a summary of key confusion matrix metrics
-            cm_summary_data = []
-            for i, metrics_dict in enumerate(all_metrics):
-                if "confusion_matrix" in metrics_dict:
-                    cm = metrics_dict["confusion_matrix"]
-                    if cm.shape == (2, 2):
-                        # Calculate metrics from confusion matrix
-                        tn, fp, fn, tp = cm.ravel()
-                        accuracy = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0
-                        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-                        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-                        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-
-                        cm_summary_data.append([
-                            f"Run {i + 1}", int(tp), int(tn), int(fp), int(fn),
-                            float(accuracy), float(precision), float(recall), float(specificity)
-                        ])
-
-            if cm_summary_data:
-                cm_summary_table = wandb.Table(
-                    columns=["Run", "TP", "TN", "FP", "FN", "Accuracy", "Precision", "Recall", "Specificity"],
-                    data=cm_summary_data
-                )
-                wandb_run.log({"Confusion Matrix Summary": cm_summary_table})
-
-            # Add statistical summary
-            stats_data = []
-            for metric in key_metrics:
-                values = [float(m[metric]) for m in all_metrics if metric in m]
-                if values:
-                    stats_data.append([
-                        metric.capitalize(),
-                        np.mean(values),
-                        np.std(values),
-                        np.min(values),
-                        np.max(values)
-                    ])
-
-            if stats_data:
-                stats_table = wandb.Table(
-                    columns=["Metric", "Mean", "Std Dev", "Min", "Max"],
-                    data=stats_data
-                )
-                wandb_run.log({"Statistical Summary": stats_table})
-
-            # Finish the wandb run
-            wandb_run.finish()
-            print(f"\nWeights & Biases tracking completed - view results at {wandb.run.url}")
-
-        except Exception as e:
-            print(f"Warning: Error during W&B summary logging: {e}")
-            try:
-                wandb_run.finish()
-            except:
-                pass
+        log_summary_to_wandb(
+            wandb_run=wandb_run,
+            all_metrics=all_metrics,
+            all_training_times=all_training_times,
+            seeds=seeds[:num_runs],
+            all_vis_paths=all_vis_paths
+        )
 
     print("\nExperiment completed successfully.")
+    return all_metrics, all_training_times, summary_file
 
 
-if __name__ == "__main__":
+# ===== Command Line Interface =====
+
+def parse_arguments():
+    """
+    Parse command line arguments.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed arguments
+    """
     parser = argparse.ArgumentParser(description="Run binary classification experiments with SLIM-GSGP")
     parser.add_argument("--use-wandb", type=bool, default=True,
                         help="Enable Weights & Biases logging")
@@ -814,14 +1350,22 @@ if __name__ == "__main__":
     parser.add_argument("--seeds", type=str, default=None,
                         help="Comma-separated list of seeds, e.g., '42,123,456'")
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    """
+    Main entry point for the script when run from the command line.
+    """
+    args = parse_arguments()
 
     # Parse seed list if provided
     seeds = None
     if args.seeds:
         seeds = [int(s.strip()) for s in args.seeds.split(',')]
 
-    main(
+    # Run experiments
+    run_experiments(
         use_wandb=args.use_wandb,
         dataset=args.dataset,
         algorithm=args.algorithm,
@@ -831,3 +1375,7 @@ if __name__ == "__main__":
         max_depth=args.max_depth,
         seeds=seeds
     )
+
+
+if __name__ == "__main__":
+    main()

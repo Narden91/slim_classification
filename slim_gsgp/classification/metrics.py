@@ -155,13 +155,13 @@ def save_metrics_to_csv(
             metrics_data[key] = value
 
     # Add confusion matrix elements for binary classification
-    if 'confusion_matrix' in metrics:
-        cm = metrics['confusion_matrix']
-        if cm.shape == (2, 2):
-            metrics_data['cm_tn'] = int(cm[0, 0])
-            metrics_data['cm_fp'] = int(cm[0, 1])
-            metrics_data['cm_fn'] = int(cm[1, 0])
-            metrics_data['cm_tp'] = int(cm[1, 1])
+    # if 'confusion_matrix' in metrics:
+    #     cm = metrics['confusion_matrix']
+    #     if cm.shape == (2, 2):
+    #         metrics_data['cm_tn'] = int(cm[0, 0])
+    #         metrics_data['cm_fp'] = int(cm[0, 1])
+    #         metrics_data['cm_fn'] = int(cm[1, 0])
+    #         metrics_data['cm_tp'] = int(cm[1, 1])
 
     # Add additional info if provided
     if additional_info:

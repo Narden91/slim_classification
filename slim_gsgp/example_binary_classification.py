@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # MIT License
 #
 # Copyright (c) 2024 DALabNOVA
@@ -20,19 +21,24 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 """
-Example script for binary classification using the SLIM-GSGP framework.
+Binary Classification Example
 
-This script demonstrates how to use the specialized binary classification module
-with integration of tree visualization and supports multiple experimental runs.
+This script runs a single binary classification experiment using the SLIM-GSGP framework.
+It supports command-line arguments for configuring experiment parameters and properly
+handles SLIM algorithm versions with dedicated subfolders for results.
+
+Example usage:
+    python binary_classification.py --dataset=breast_cancer --algorithm=gp --seed=42
+    python binary_classification.py --dataset=breast_cancer --algorithm=slim --slim-version=SLIM+SIG2 --seed=42
 """
-import time
+
 import os
-import csv
+import time
+import argparse
 import torch
 import numpy as np
-import pandas as pd
+import csv
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
 
 from slim_gsgp.utils.utils import train_test_split, create_result_directory
 from slim_gsgp.datasets.data_loader import load_classification_dataset
@@ -44,421 +50,80 @@ from slim_gsgp.classification import (
 )
 from slim_gsgp.tree_visualizer import visualize_gp_tree
 
-
-def run_single_experiment(
-        dataset: str,
-        algorithm: str,
-        X_train: torch.Tensor,
-        y_train: torch.Tensor,
-        X_val: torch.Tensor,
-        y_val: torch.Tensor,
-        X_test: torch.Tensor,
-        y_test: torch.Tensor,
-        root_dir: str,
-        seed: int = 42,
-        pop_size: int = 50,
-        n_iter: int = 10,
-        max_depth: int = 8,
-        use_sigmoid: bool = True,
-        sigmoid_scale: float = 1.0,
-        fitness_function: str = 'binary_rmse',
-        verbose: bool = True,
-        save_visualization: bool = True,
-        run_index: Optional[int] = None,
-) -> Tuple[Dict[str, Any], float, str, Optional[str]]:
-    """
-    Run a single binary classification experiment.
-
-    Parameters
-    ----------
-    dataset : str
-        Dataset name
-    algorithm : str
-        Algorithm to use (gp, gsgp, slim)
-    X_train : torch.Tensor
-        Training features
-    y_train : torch.Tensor
-        Training labels
-    X_val : torch.Tensor
-        Validation features
-    y_val : torch.Tensor
-        Validation labels
-    X_test : torch.Tensor
-        Test features
-    y_test : torch.Tensor
-        Test labels
-    root_dir : str
-        Project root directory
-    seed : int
-        Random seed
-    pop_size : int
-        Population size
-    n_iter : int
-        Number of iterations
-    max_depth : int
-        Maximum tree depth
-    use_sigmoid : bool
-        Whether to use sigmoid activation
-    sigmoid_scale : float
-        Scaling factor for sigmoid
-    fitness_function : str
-        Fitness function to use
-    verbose : bool
-        Whether to print detailed output
-    save_visualization : bool
-        Whether to save tree visualization
-    run_index : int, optional
-        Index of the current run (for multi-run experiments)
-
-    Returns
-    -------
-    Tuple[Dict[str, Any], float, str, Optional[str]]
-        Metrics, training time, metrics file path, and visualization path (if applicable)
-    """
-    # Set random seed
-    torch.manual_seed(seed)
-
-    # Label for run identifier (for logging)
-    run_label = f"Run {run_index}" if run_index is not None else f"Seed {seed}"
-
-    if verbose:
-        print(f"\n{'=' * 60}")
-        print(f"{run_label}: Running binary classification with {algorithm.upper()} on {dataset}")
-        print(f"{'=' * 60}")
-        print(f"Parameters:")
-        print(f"  Population size: {pop_size}")
-        print(f"  Iterations: {n_iter}")
-        print(f"  Seed: {seed}")
-        print(f"  Fitness function: {fitness_function}")
-        print(f"  Use sigmoid: {use_sigmoid}")
-        print(f"  Sigmoid scale: {sigmoid_scale}")
-        print(f"  Max depth: {max_depth}")
-        print()
-
-    # Set algorithm-specific parameters
-    algo_params = {
-        'pop_size': pop_size,
-        'n_iter': n_iter,
-        'seed': seed,
-        'dataset_name': dataset,
-        'max_depth': max_depth,
-    }
-
-    # Create log directory if needed
-    log_dir = os.path.join(root_dir, "log")
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-
-    if algorithm == 'gsgp':
-        # For GSGP, ensure reconstruct=True to enable prediction
-        algo_params['reconstruct'] = True
-        algo_params['ms_lower'] = 0
-        algo_params['ms_upper'] = 1
-        algo_params['log_path'] = os.path.join(log_dir, f"gsgp_{seed}.csv")
-    elif algorithm == 'slim':
-        # For SLIM, set appropriate version
-        algo_params['slim_version'] = 'SLIM+ABS'
-        algo_params['p_inflate'] = 0.5
-        algo_params['ms_lower'] = 0
-        algo_params['ms_upper'] = 1
-        algo_params['log_path'] = os.path.join(log_dir, f"slim_{seed}.csv")
-
-    # Train the classifier
-    start_time = time.time()
-
-    if verbose:
-        print(f"{run_label}: Training binary classifier...")
-
-    model = train_binary_classifier(
-        X_train=X_train,
-        y_train=y_train,
-        X_val=X_val,
-        y_val=y_val,
-        algorithm=algorithm,
-        use_sigmoid=use_sigmoid,
-        sigmoid_scale=sigmoid_scale,
-        fitness_function=fitness_function,
-        **algo_params
-    )
-
-    training_time = time.time() - start_time
-
-    if verbose:
-        print(f"{run_label}: Training completed in {training_time:.2f} seconds")
-        print()
-        print(f"{run_label}: Evaluating on test set:")
-
-    # Evaluate on test set
-    metrics = model.evaluate(X_test, y_test)
-
-    # Print metrics if verbose
-    if verbose:
-        for name, value in metrics.items():
-            if name != 'confusion_matrix':
-                print(f"{name}: {value:.4f}")
-
-        # Print confusion matrix
-        print("\nConfusion Matrix:")
-        cm = metrics['confusion_matrix']
-        print(f"[{cm[0, 0]}, {cm[0, 1]}]")
-        print(f"[{cm[1, 0]}, {cm[1, 1]}]")
-
-    # Save metrics to CSV file
-    additional_info = {
-        'pop_size': pop_size,
-        'n_iter': n_iter,
-        'seed': seed,
-        'use_sigmoid': use_sigmoid,
-        'sigmoid_scale': sigmoid_scale,
-        'fitness_function': fitness_function,
-        'max_depth': max_depth,
-        'run_index': run_index if run_index is not None else 'N/A'
-    }
-
-    metrics_file = save_metrics_to_csv(
-        metrics=metrics,
-        training_time=training_time,
-        dataset_name=dataset,
-        algorithm=algorithm,
-        root_dir=root_dir,
-        additional_info=additional_info
-    )
-
-    if verbose:
-        print(f"\n{run_label}: Metrics saved to: {metrics_file}")
-
-    # Visualization path (if visualization is created)
-    vis_path = None
-
-    # Try to visualize the model
-    if save_visualization:
-        try:
-            # Create visualization directory
-            vis_dir = create_result_directory(
-                root_dir=root_dir,
-                dataset=dataset,
-                algorithm=algorithm,
-                result_type="visualizations"
-            )
-
-            if verbose:
-                print(f"\n{run_label}: Tree text representation:")
-                model.print_tree_representation()
-
-            # Create a unique filename for the visualization
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            run_suffix = f"run_{run_index}" if run_index is not None else f"seed_{seed}"
-            filename_visualization = f"classification_{run_suffix}_{timestamp}"
-
-            # Try to extract and visualize the tree
-            if hasattr(model.model, 'repr_'):
-                # For GP models
-                tree_structure = model.model.repr_
-                vis_path = os.path.join(vis_dir, filename_visualization)
-                visualize_gp_tree(tree_structure, vis_path, 'png')
-                if verbose:
-                    print(f"{run_label}: Tree visualization saved to {vis_path}.png")
-            elif hasattr(model.model, 'structure'):
-                # For GSGP models
-                tree_structure = model.model.structure
-                vis_path = os.path.join(vis_dir, filename_visualization)
-                visualize_gp_tree(tree_structure, vis_path, 'png')
-                if verbose:
-                    print(f"{run_label}: Tree visualization saved to {vis_path}.png")
-            elif hasattr(model.model, 'collection'):
-                # For SLIM models
-                tree_structure = [t.structure for t in model.model.collection]
-                vis_path = os.path.join(vis_dir, filename_visualization)
-                visualize_gp_tree(tree_structure, vis_path, 'png')
-                if verbose:
-                    print(f"{run_label}: Tree visualization saved to {vis_path}.png")
-        except Exception as e:
-            if verbose:
-                print(f"{run_label}: Could not visualize the model: {str(e)}")
-            vis_path = None
-
-    return metrics, training_time, metrics_file, vis_path
+# Valid SLIM algorithm versions
+SLIM_VERSIONS = ["SLIM+SIG2", "SLIM*SIG2", "SLIM+ABS", "SLIM*ABS", "SLIM+SIG1", "SLIM*SIG1"]
 
 
-def save_unified_metrics(
-        all_metrics: List[Dict[str, Any]],
-        training_times: List[float],
-        seeds: List[int],
-        dataset: str,
-        algorithm: str,
-        run_params: Dict[str, Any],
-        root_dir: str
-) -> str:
-    """
-    Save all metrics from multiple runs to a single CSV file with one row per run
-    and a final row with mean values.
-
-    Parameters
-    ----------
-    all_metrics : List[Dict[str, Any]]
-        List of metrics from all runs
-    training_times : List[float]
-        List of training times for all runs
-    seeds : List[int]
-        List of seeds used for each run
-    dataset : str
-        Dataset name
-    algorithm : str
-        Algorithm used
-    run_params : Dict[str, Any]
-        Parameters for the runs
-    root_dir : str
-        Project root directory
-
-    Returns
-    -------
-    str
-        Path to the saved metrics file
-    """
-    # Create metrics directory
-    metrics_dir = create_result_directory(
-        root_dir=root_dir,
-        dataset=dataset,
-        algorithm=algorithm,
-        result_type="metrics"
-    )
-
-    # Fixed filename as requested
-    summary_path = os.path.join(metrics_dir, "summary_metrics.csv")
-
-    # Extract key metrics to include in the file
-    key_metrics = ['accuracy', 'precision', 'recall', 'f1', 'specificity',
-                   'true_positives', 'true_negatives', 'false_positives', 'false_negatives']
-
-    # Prepare rows for the CSV file
-    rows = []
-
-    # Add one row for each run
-    for i, (metrics, training_time, seed) in enumerate(zip(all_metrics, training_times, seeds)):
-        row = {
-            'run_index': i + 1,
-            'seed': seed,
-            'dataset': dataset,
-            'algorithm': algorithm,
-            'training_time_seconds': training_time,
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        }
-
-        # Add run parameters
-        for key, value in run_params.items():
-            if key != 'seeds':  # Skip the seeds list
-                if isinstance(value, list) and len(value) > i:
-                    row[key] = value[i]
-                else:
-                    row[key] = value
-
-        # Add metrics
-        for metric in key_metrics:
-            if metric in metrics and not isinstance(metrics[metric], (dict, list, np.ndarray)):
-                row[metric] = float(metrics[metric])
-
-        # Add confusion matrix elements if available
-        if 'confusion_matrix' in metrics:
-            cm = metrics['confusion_matrix']
-            if cm.shape == (2, 2):
-                row['cm_tn'] = int(cm[0, 0])
-                row['cm_fp'] = int(cm[0, 1])
-                row['cm_fn'] = int(cm[1, 0])
-                row['cm_tp'] = int(cm[1, 1])
-
-        rows.append(row)
-
-    # Add a row with mean values
-    mean_row = {
-        'run_index': 'mean',
-        'seed': 'N/A',
-        'dataset': dataset,
-        'algorithm': algorithm,
-        'training_time_seconds': np.mean(training_times),
-        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    }
-
-    # Add run parameters (same as others)
-    for key, value in run_params.items():
-        if key != 'seeds':  # Skip the seeds list
-            if not isinstance(value, list):
-                mean_row[key] = value
-
-    # Calculate mean for all numeric metrics across all runs
-    all_keys = set().union(*[row.keys() for row in rows])
-    for key in all_keys:
-        if key not in mean_row:
-            values = []
-            for row in rows:
-                if key in row and isinstance(row[key], (int, float)) and not isinstance(row[key], bool):
-                    values.append(row[key])
-            if values:
-                mean_row[key] = np.mean(values)
-
-    # Add the mean row
-    rows.append(mean_row)
-
-    # Write to CSV
-    fieldnames = list(set().union(*[row.keys() for row in rows]))
-    # Sort fieldnames for consistent ordering
-    fieldnames.sort()
-    # Move run_index to the front
-    if 'run_index' in fieldnames:
-        fieldnames.remove('run_index')
-        fieldnames.insert(0, 'run_index')
-
-    with open(summary_path, 'w', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
-
-    return summary_path
-
-
-def main():
-    """
-    Main function to run the binary classification example with multiple runs.
-    """
-    # Get project root directory
+def get_project_root():
+    """Get the project root directory."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    root_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
+    return os.path.abspath(os.path.join(script_dir, os.pardir))
 
-    # Define parameters for all runs
-    dataset = 'breast_cancer'  # Options: 'breast_cancer', 'iris', 'digits', 'wine'
-    algorithm = 'gp'  # Options: 'gp', 'gsgp', 'slim'
 
-    # Run configuration
-    num_runs = 3  # Number of runs to execute
-    seeds = [42, 123, 456]  # Random seeds for each run (should match num_runs)
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Run a binary classification experiment")
 
-    # Parameters for all runs
-    pop_size = 50
-    n_iter = 10
-    max_depth = 8
-    use_sigmoid = True
-    sigmoid_scale = 1.0
-    fitness_function = 'binary_rmse'
+    # Dataset and algorithm selection
+    parser.add_argument("--dataset", type=str, default="breast_cancer",
+                        help="Dataset to use (breast_cancer, iris, digits, wine)")
+    parser.add_argument("--algorithm", type=str, default="gp",
+                        choices=["gp", "gsgp", "slim"],
+                        help="Algorithm to use (gp, gsgp, slim)")
+    parser.add_argument("--slim-version", type=str, default="SLIM+ABS",
+                        choices=SLIM_VERSIONS,
+                        help="SLIM algorithm version (only used when algorithm=slim)")
 
-    # Whether to save visualizations for each run
-    save_visualization = True
+    # Training parameters
+    parser.add_argument("--pop-size", type=int, default=50,
+                        help="Population size")
+    parser.add_argument("--n-iter", type=int, default=10,
+                        help="Number of iterations")
+    parser.add_argument("--max-depth", type=int, default=8,
+                        help="Maximum tree depth")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducibility")
 
-    # Whether to save individual metrics files (not necessary with unified summary)
-    save_individual_metrics = False
+    # Classification parameters
+    parser.add_argument("--use-sigmoid", type=bool, default=True,
+                        help="Whether to use sigmoid activation")
+    parser.add_argument("--sigmoid-scale", type=float, default=1.0,
+                        help="Scaling factor for sigmoid")
+    parser.add_argument("--fitness-function", type=str, default="binary_rmse",
+                        help="Fitness function to use")
 
-    # Verbose output for individual runs
-    verbose_individual_runs = True
+    # Output control
+    parser.add_argument("--verbose", type=bool, default=True,
+                        help="Print detailed output")
+    parser.add_argument("--save-visualization", type=bool, default=True,
+                        help="Save tree visualization")
 
-    # Register binary fitness functions
-    register_classification_fitness_functions()
+    # SLIM specific parameters
+    parser.add_argument("--p-inflate", type=float, default=0.5,
+                        help="Probability of inflate mutation for SLIM algorithm")
 
-    print(f"Running {num_runs} binary classification experiments with {algorithm.upper()} on {dataset}")
-    print(f"Seeds: {seeds}")
-    print()
+    return parser.parse_args()
 
-    # Load the dataset
-    print(f"Loading dataset: {dataset}")
-    X, y, n_classes, class_labels = load_classification_dataset(dataset)
+
+def load_and_split_dataset(dataset_name, seed):
+    """
+    Load and split a dataset into train, validation, and test sets.
+
+    Parameters
+    ----------
+    dataset_name : str
+        Name of the dataset to load
+    seed : int
+        Random seed for reproducible splits
+
+    Returns
+    -------
+    tuple
+        X_train, X_val, X_test, y_train, y_val, y_test, n_classes, class_labels
+    """
+    print(f"Loading dataset: {dataset_name}")
+    X, y, n_classes, class_labels = load_classification_dataset(dataset_name)
+
     print(f"Dataset shape: {X.shape}")
     print(f"Number of classes: {n_classes}")
     print(f"Class distribution: {torch.bincount(y).tolist()}")
@@ -466,110 +131,358 @@ def main():
 
     # Check if dataset is binary
     if n_classes != 2:
-        raise ValueError(f"This example is for binary classification only. Dataset {dataset} has {n_classes} classes.")
+        raise ValueError(
+            f"This example is for binary classification only. Dataset {dataset_name} has {n_classes} classes.")
 
     # Split the data into train, validation, and test sets
-    X_train, X_temp, y_train, y_temp = train_test_split(X, y, p_test=0.3, seed=seeds[0])
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, p_test=0.5, seed=seeds[0])
+    X_train, X_temp, y_train, y_temp = train_test_split(X, y, p_test=0.3, seed=seed)
+    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, p_test=0.5, seed=seed)
 
     print(f"Train set size: {len(X_train)}")
     print(f"Validation set size: {len(X_val)}")
     print(f"Test set size: {len(X_test)}")
     print()
 
-    # Run all experiments
-    all_metrics = []
-    all_training_times = []
-    all_metrics_files = []
-    all_vis_paths = []
+    return X_train, X_val, X_test, y_train, y_val, y_test, n_classes, class_labels
 
-    print(f"Starting {num_runs} experimental runs...")
 
-    for i in range(num_runs):
-        # Get the seed for this run
-        seed = seeds[i] if i < len(seeds) else seeds[0] + i
+def setup_algorithm_params(args, dataset_name):
+    """
+    Set up algorithm-specific parameters.
 
-        # Run a single experiment
-        metrics, training_time, metrics_file, vis_path = run_single_experiment(
-            dataset=dataset,
-            algorithm=algorithm,
-            X_train=X_train,
-            y_train=y_train,
-            X_val=X_val,
-            y_val=y_val,
-            X_test=X_test,
-            y_test=y_test,
-            root_dir=root_dir,
-            seed=seed,
-            pop_size=pop_size,
-            n_iter=n_iter,
-            max_depth=max_depth,
-            use_sigmoid=use_sigmoid,
-            sigmoid_scale=sigmoid_scale,
-            fitness_function=fitness_function,
-            verbose=verbose_individual_runs,
-            save_visualization=save_visualization,
-            run_index=i + 1
-        )
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Command line arguments
+    dataset_name : str
+        Dataset name
 
-        # Collect results
-        all_metrics.append(metrics)
-        all_training_times.append(training_time)
-        if metrics_file:
-            all_metrics_files.append(metrics_file)
-        if vis_path:
-            all_vis_paths.append(vis_path)
-
-    # Save unified metrics file
-    run_params = {
-        'pop_size': pop_size,
-        'n_iter': n_iter,
-        'max_depth': max_depth,
-        'use_sigmoid': use_sigmoid,
-        'sigmoid_scale': sigmoid_scale,
-        'fitness_function': fitness_function,
+    Returns
+    -------
+    dict
+        Algorithm-specific parameters
+    """
+    # Set common algorithm parameters
+    algo_params = {
+        'pop_size': args.pop_size,
+        'n_iter': args.n_iter,
+        'seed': args.seed,
+        'dataset_name': dataset_name,
+        'max_depth': args.max_depth,
     }
 
-    summary_file = save_unified_metrics(
-        all_metrics=all_metrics,
-        training_times=all_training_times,
-        seeds=seeds[:num_runs],
-        dataset=dataset,
-        algorithm=algorithm,
-        run_params=run_params,
-        root_dir=root_dir
+    # Create log directory if needed
+    log_dir = os.path.join(get_project_root(), "log")
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    # Add algorithm-specific parameters
+    if args.algorithm == 'gsgp':
+        # For GSGP, ensure reconstruct=True to enable prediction
+        algo_params['reconstruct'] = True
+        algo_params['ms_lower'] = 0
+        algo_params['ms_upper'] = 1
+        algo_params['log_path'] = os.path.join(log_dir, f"gsgp_{args.seed}.csv")
+
+    elif args.algorithm == 'slim':
+        # For SLIM, set appropriate version
+        algo_params['slim_version'] = args.slim_version
+        algo_params['p_inflate'] = args.p_inflate
+        algo_params['ms_lower'] = 0
+        algo_params['ms_upper'] = 1
+
+        # Create SLIM version specific log directory
+        slim_log_dir = os.path.join(log_dir, args.slim_version)
+        if not os.path.exists(slim_log_dir):
+            os.makedirs(slim_log_dir)
+
+        algo_params['log_path'] = os.path.join(slim_log_dir, f"slim_{args.slim_version}_{args.seed}.csv")
+
+    return algo_params
+
+
+def get_algorithm_identifier(args):
+    """
+    Get a proper algorithm identifier for directory creation.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Command line arguments
+
+    Returns
+    -------
+    str
+        Algorithm identifier for directory creation
+    """
+    if args.algorithm == 'slim':
+        return f"slim_{args.slim_version}"
+    else:
+        return args.algorithm
+
+
+def create_visualization(model, args, root_dir, seed, verbose=True):
+    """
+    Create a visualization of the model tree structure.
+
+    Parameters
+    ----------
+    model : BinaryClassifier
+        The trained classifier model
+    args : argparse.Namespace
+        Command line arguments
+    root_dir : str
+        Project root directory
+    seed : int
+        Random seed used
+    verbose : bool, optional
+        Whether to print verbose output
+
+    Returns
+    -------
+    str or None
+        Path to the visualization file if created, None otherwise
+    """
+    try:
+        # Get algorithm identifier
+        algorithm_id = get_algorithm_identifier(args)
+
+        # Create visualization directory
+        vis_dir = create_result_directory(
+            root_dir=root_dir,
+            dataset=args.dataset,
+            algorithm=algorithm_id,
+            result_type="visualizations"
+        )
+
+        if verbose:
+            print("\nTree text representation:")
+            model.print_tree_representation()
+
+        # Create a unique filename for the visualization
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"classification_seed_{seed}_{timestamp}"
+
+        # Try to extract and visualize the tree
+        tree_structure = None
+        vis_path = None
+
+        if hasattr(model.model, 'repr_'):
+            # For GP models
+            tree_structure = model.model.repr_
+        elif hasattr(model.model, 'structure'):
+            # For GSGP models
+            tree_structure = model.model.structure
+        elif hasattr(model.model, 'collection'):
+            # For SLIM models
+            tree_structure = [t.structure for t in model.model.collection]
+
+        if tree_structure:
+            vis_path = os.path.join(vis_dir, filename)
+            visualize_gp_tree(tree_structure, vis_path, 'png')
+            if verbose:
+                print(f"Tree visualization saved to {vis_path}.png")
+
+        return vis_path
+
+    except Exception as e:
+        if verbose:
+            print(f"Could not visualize the model: {str(e)}")
+        return None
+
+
+def run_experiment(args):
+    """
+    Run a single binary classification experiment.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Command line arguments
+
+    Returns
+    -------
+    tuple
+        metrics, training_time, metrics_file_path, visualization_path
+    """
+    root_dir = get_project_root()
+
+    # Register binary fitness functions
+    register_classification_fitness_functions()
+
+    # Load and split the dataset
+    X_train, X_val, X_test, y_train, y_val, y_test, n_classes, class_labels = load_and_split_dataset(
+        args.dataset, args.seed
     )
 
-    # Print summary results
-    print("\n" + "=" * 60)
-    print(f"SUMMARY RESULTS FOR {num_runs} RUNS")
+    # Set up algorithm parameters
+    algo_params = setup_algorithm_params(args, args.dataset)
+
+    # Get algorithm display name
+    algorithm_display = args.algorithm.upper()
+    if args.algorithm == 'slim':
+        algorithm_display = f"{algorithm_display} ({args.slim_version})"
+
+    # Print experiment information
+    print(f"Running binary classification with {algorithm_display} on {args.dataset}")
+    print(f"Parameters:")
+    print(f"  Population size: {args.pop_size}")
+    print(f"  Iterations: {args.n_iter}")
+    print(f"  Seed: {args.seed}")
+    print(f"  Fitness function: {args.fitness_function}")
+    print(f"  Use sigmoid: {args.use_sigmoid}")
+    print(f"  Sigmoid scale: {args.sigmoid_scale}")
+    print(f"  Max depth: {args.max_depth}")
+    if args.algorithm == 'slim':
+        print(f"  P-inflate: {args.p_inflate}")
+    print()
+
+    # Train the classifier
+    print("Training binary classifier...")
+    start_time = time.time()
+
+    model = train_binary_classifier(
+        X_train=X_train,
+        y_train=y_train,
+        X_val=X_val,
+        y_val=y_val,
+        algorithm=args.algorithm,
+        use_sigmoid=args.use_sigmoid,
+        sigmoid_scale=args.sigmoid_scale,
+        fitness_function=args.fitness_function,
+        **algo_params
+    )
+
+    training_time = time.time() - start_time
+    print(f"Training completed in {training_time:.2f} seconds")
+
+    # Evaluate on test set
+    print("\nEvaluating on test set:")
+    metrics = model.evaluate(X_test, y_test)
+
+    # Print metrics
+    for name, value in metrics.items():
+        if name != 'confusion_matrix':
+            print(f"{name}: {value:.4f}")
+
+    # Print confusion matrix
+    print("\nConfusion Matrix:")
+    cm = metrics['confusion_matrix']
+    print(f"[{cm[0, 0]}, {cm[0, 1]}]")
+    print(f"[{cm[1, 0]}, {cm[1, 1]}]")
+
+    # Save metrics to CSV file
+    additional_info = {
+        'pop_size': args.pop_size,
+        'n_iter': args.n_iter,
+        'seed': args.seed,
+        'use_sigmoid': args.use_sigmoid,
+        'sigmoid_scale': args.sigmoid_scale,
+        'fitness_function': args.fitness_function,
+        'max_depth': args.max_depth
+    }
+
+    if args.algorithm == 'slim':
+        additional_info['slim_version'] = args.slim_version
+        additional_info['p_inflate'] = args.p_inflate
+
+    # Get algorithm identifier for directory creation
+    algorithm_id = get_algorithm_identifier(args)
+
+    # Create a custom dictionary for metrics to avoid duplication
+    custom_metrics = {}
+
+    # Add performance metrics
+    for key in ['accuracy', 'precision', 'recall', 'f1', 'specificity']:
+        if key in metrics:
+            custom_metrics[key] = metrics[key]
+
+    # Add confusion matrix values only once with consistent naming
+    if 'confusion_matrix' in metrics:
+        cm = metrics['confusion_matrix']
+        if cm.shape == (2, 2):  # Binary classification
+            custom_metrics['true_negatives'] = int(cm[0, 0])
+            custom_metrics['false_positives'] = int(cm[0, 1])
+            custom_metrics['false_negatives'] = int(cm[1, 0])
+            custom_metrics['true_positives'] = int(cm[1, 1])
+
+    # Handle any additional metrics that might be present
+    for key in metrics:
+        if key not in ['accuracy', 'precision', 'recall', 'f1', 'specificity', 'confusion_matrix',
+                       'true_positives', 'true_negatives', 'false_positives', 'false_negatives']:
+            custom_metrics[key] = metrics[key]
+
+    # Create metrics directory
+    metrics_dir = create_result_directory(
+        root_dir=root_dir,
+        dataset=args.dataset,
+        algorithm=algorithm_id,
+        result_type="metrics"
+    )
+
+    # Generate timestamp for filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_path = os.path.join(metrics_dir, f"metrics_{timestamp}.csv")
+
+    # Prepare data for CSV
+    metrics_data = {
+        # Metadata
+        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'dataset': args.dataset,
+        'algorithm': algorithm_id,
+        'training_time_seconds': training_time,
+    }
+
+    # Add metrics
+    for key, value in custom_metrics.items():
+        metrics_data[key] = value
+
+    # Add additional info
+    for key, value in additional_info.items():
+        metrics_data[key] = value
+
+    # Write to CSV
+    with open(csv_path, 'w', newline='') as csvfile:
+        fieldnames = list(metrics_data.keys())
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow(metrics_data)
+
+    print(f"\nMetrics saved to: {csv_path}")
+
+    print(f"\nMetrics saved to: {metrics_dir}")
+
+    # Create visualization if requested
+    vis_path = None
+    if args.save_visualization:
+        vis_path = create_visualization(
+            model=model,
+            args=args,
+            root_dir=root_dir,
+            seed=args.seed,
+            verbose=args.verbose
+        )
+
+    return metrics, training_time, csv_path, vis_path
+
+
+def main():
+    """Main function to run a binary classification experiment."""
+    args = parse_arguments()
+
+    print(f"SLIM-GSGP Binary Classification Example")
     print("=" * 60)
 
-    # Calculate mean and standard deviation for key metrics
-    key_metrics = ['accuracy', 'precision', 'recall', 'f1']
-    for metric in key_metrics:
-        values = [float(m[metric]) for m in all_metrics if metric in m]
-        if values:
-            print(f"{metric.capitalize()}: {np.mean(values):.4f} ± {np.std(values):.4f}")
-
-    # Calculate mean and standard deviation for training time
-    print(f"Training time: {np.mean(all_training_times):.2f} ± {np.std(all_training_times):.2f} seconds")
-
-    print(f"\nUnified metrics saved to: {summary_file}")
-
-    if save_individual_metrics and all_metrics_files:
-        print(f"Individual metrics files ({len(all_metrics_files)}):")
-        for i, file_path in enumerate(all_metrics_files):
-            print(f"  Run {i + 1}: {os.path.basename(file_path)}")
-
-    print(f"\nVisualization files ({len(all_vis_paths)}):")
-    if all_vis_paths:
-        for i, file_path in enumerate(all_vis_paths):
-            print(f"  Run {i + 1}: {os.path.basename(file_path)}.png")
-    else:
-        print("  None generated")
+    metrics, training_time, metrics_file, vis_path = run_experiment(args)
 
     print("\nExperiment completed successfully.")
+    print(f"Training time: {training_time:.2f} seconds")
+
+    # Print visualization path if available
+    if vis_path:
+        print(f"Visualization saved to: {vis_path}.png")
+
+    return 0
 
 
 if __name__ == "__main__":

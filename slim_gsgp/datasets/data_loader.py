@@ -25,7 +25,8 @@ import pandas
 import pandas as pd
 import torch
 
-def load_pandas_df(df : pandas.DataFrame, X_y: bool = True):
+
+def load_pandas_df(df: pandas.DataFrame, X_y: bool = True):
     """
 
     Parameters
@@ -86,6 +87,7 @@ def load_resid_build_sale_price(X_y=True):
     else:
         return df
 
+
 def load_istanbul(X_y=True):
     """
     Loads and returns the Istanbul data set (regression). Taken from https://docs.1010data.com/MachineLearningExamples/IstanbulDataSet.html.
@@ -116,7 +118,6 @@ def load_istanbul(X_y=True):
         )
     else:
         return df
-
 
 
 #   The following functions were Adapted from the GPOL library.
@@ -210,6 +211,7 @@ def load_bike_sharing(X_y=True):
         )
     else:
         return df
+
 
 def load_boston(X_y=True):
     """Loads and returns the Boston Housing data set (regression)

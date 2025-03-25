@@ -41,7 +41,7 @@ import csv
 from datetime import datetime
 
 from slim_gsgp.utils.utils import train_test_split, create_result_directory
-from slim_gsgp.datasets.data_loader import load_classification_dataset
+from slim_gsgp.datasets.data_loader import load_classification_dataset, load_classification_benchmark_dataset
 from slim_gsgp.classification import (
     train_binary_classifier,
     register_classification_fitness_functions,
@@ -65,8 +65,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Run a binary classification experiment")
 
     # Dataset and algorithm selection
-    parser.add_argument("--dataset", type=str, default="breast_cancer",
-                        help="Dataset to use (breast_cancer, iris, digits, wine)")
+    parser.add_argument("--dataset", type=str, default="eeg",
+                        help="Dataset to use.")
     parser.add_argument("--algorithm", type=str, default="gp",
                         choices=["gp", "gsgp", "slim"],
                         help="Algorithm to use (gp, gsgp, slim)")
@@ -89,11 +89,11 @@ def parse_arguments():
                         help="Whether to use sigmoid activation")
     parser.add_argument("--sigmoid-scale", type=float, default=1.0,
                         help="Scaling factor for sigmoid")
-    parser.add_argument("--fitness-function", type=str, default="binary_rmse",
-                        help="Fitness function to use")
+    parser.add_argument("--fitness-function", type=str, default="binary_mse",
+                        help="Fitness function to use: binary_rmse, binary_mse, binary_mae")
 
     # Output control
-    parser.add_argument("--verbose", type=bool, default=True,
+    parser.add_argument("--verbose", type=bool, default=False,
                         help="Print detailed output")
     parser.add_argument("--save-visualization", type=bool, default=True,
                         help="Save tree visualization")
@@ -122,7 +122,9 @@ def load_and_split_dataset(dataset_name, seed):
         X_train, X_val, X_test, y_train, y_val, y_test, n_classes, class_labels
     """
     print(f"Loading dataset: {dataset_name}")
-    X, y, n_classes, class_labels = load_classification_dataset(dataset_name)
+    # X, y, n_classes, class_labels = load_classification_dataset(dataset_name)
+
+    X, y, n_classes, class_labels = load_classification_benchmark_dataset(dataset_name)
 
     print(f"Dataset shape: {X.shape}")
     print(f"Number of classes: {n_classes}")
@@ -260,8 +262,8 @@ def create_visualization(model, args, root_dir, seed, verbose=True):
             model.print_tree_representation()
 
         # Create a unique filename for the visualization
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"classification_seed_{seed}_{timestamp}"
+        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"classification_tree_{seed}"
 
         # Try to extract and visualize the tree
         tree_structure = None
@@ -421,8 +423,8 @@ def run_experiment(args):
     )
 
     # Generate timestamp for filename
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = os.path.join(metrics_dir, f"metrics_{timestamp}.csv")
+    # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_path = os.path.join(metrics_dir, f"metrics_{args.seed}.csv")
 
     # Prepare data for CSV
     metrics_data = {
@@ -449,8 +451,6 @@ def run_experiment(args):
         writer.writerow(metrics_data)
 
     print(f"\nMetrics saved to: {csv_path}")
-
-    print(f"\nMetrics saved to: {metrics_dir}")
 
     # Create visualization if requested
     vis_path = None

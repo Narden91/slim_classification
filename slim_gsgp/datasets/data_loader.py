@@ -21,12 +21,11 @@
 # SOFTWARE.
 import os
 
-import pandas
 import pandas as pd
 import torch
 
 
-def load_pandas_df(df: pandas.DataFrame, X_y: bool = True):
+def load_pandas_df(df: pd.DataFrame, X_y: bool = True):
     """
 
     Parameters
@@ -856,6 +855,56 @@ def load_classification_dataset(dataset_name):
 
     # For both binary and multiclass problems, we want long integers for y
     # The classification modules will handle conversion to float when needed
+    y = y.long()
+
+    return X, y, n_classes, class_labels
+
+
+def load_classification_benchmark_dataset(dataset_name: str = "", path: str = "") -> tuple:
+    """
+    Load a classification dataset from the benchmark datasets.
+
+    Parameters
+    ----------
+    dataset_name : str
+        Name of the dataset to load. If provided, this will be used to load the dataset.
+    path : str
+        Path to the dataset file. If provided, this will be used to load the dataset.
+
+    Returns
+    -------
+    tuple
+        (X, y, n_classes, class_labels) where X and y are the features and labels,
+        n_classes is the number of classes, and class_labels are the class names.
+    """
+    try:
+        if path == "":
+            dataset_path = os.path.join(
+                os.path.dirname(os.path.realpath(__file__)), "benchmark", dataset_name + ".csv"
+            )
+        else:
+            dataset_path = path
+    except FileNotFoundError:
+        print("Dataset not found.")
+        return
+
+    df = pd.read_csv(dataset_path)
+
+    print(df)
+
+    # Extract features and labels
+    X = df.iloc[:, :-1].values
+    y = df.iloc[:, -1].values
+
+    # Convert to PyTorch tensors
+    X = torch.tensor(X, dtype=torch.float32)
+    y = torch.tensor(y, dtype=torch.long)
+
+    # Determine number of classes
+    n_classes = len(torch.unique(y))
+
+    class_labels = df.iloc[:, -1].unique()
+
     y = y.long()
 
     return X, y, n_classes, class_labels

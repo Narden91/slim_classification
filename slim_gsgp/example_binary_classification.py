@@ -39,6 +39,7 @@ import torch
 import numpy as np
 import csv
 from datetime import datetime
+from types import SimpleNamespace
 
 from slim_gsgp.utils.utils import train_test_split, create_result_directory
 from slim_gsgp.datasets.data_loader import load_classification_dataset, load_classification_benchmark_dataset
@@ -70,7 +71,8 @@ def parse_arguments():
     parser.add_argument("--algorithm", type=str, default="slim",
                         choices=["gp", "gsgp", "slim"],
                         help="Algorithm to use (gp, gsgp, slim)")
-    parser.add_argument("--slim-version", type=str, default="SLIM+ABS", # "SLIM+SIG2", "SLIM*SIG2", "SLIM+ABS", "SLIM*ABS", "SLIM+SIG1", "SLIM*SIG1"
+    parser.add_argument("--slim-version", type=str, default="SLIM+ABS",
+                        # "SLIM+SIG2", "SLIM*SIG2", "SLIM+ABS", "SLIM*ABS", "SLIM+SIG1", "SLIM*SIG1"
                         choices=SLIM_VERSIONS,
                         help="SLIM algorithm version (only used when algorithm=slim)")
 
@@ -105,6 +107,34 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def create_default_experiment_config():
+    """Create a default configuration for the experiment."""
+    return {
+        # Dataset and algorithm selection
+        "dataset": "eeg",
+        "algorithm": "slim",
+        "slim_version": "SLIM+ABS",
+
+        # Training parameters
+        "pop_size": 50,
+        "n_iter": 10,
+        "max_depth": 8,
+        "seed": 42,
+
+        # Classification parameters
+        "use_sigmoid": True,
+        "sigmoid_scale": 1.0,
+        "fitness_function": "binary_rmse",
+
+        # Output control
+        "verbose": False,
+        "save_visualization": True,
+
+        # SLIM specific parameters
+        "p_inflate": 0.5
+    }
+
+
 def load_and_split_dataset(dataset_name, seed):
     """
     Load and split a dataset into train, validation, and test sets.
@@ -122,9 +152,12 @@ def load_and_split_dataset(dataset_name, seed):
         X_train, X_val, X_test, y_train, y_val, y_test, n_classes, class_labels
     """
     print(f"Loading dataset: {dataset_name}")
-    # X, y, n_classes, class_labels = load_classification_dataset(dataset_name)
-
-    X, y, n_classes, class_labels = load_classification_benchmark_dataset(dataset_name)
+    try:
+        X, y, n_classes, class_labels = load_classification_benchmark_dataset(dataset_name)
+    except Exception as e:
+        print(f"Error loading benchmark dataset: {e}")
+        print("Trying to load standard dataset...")
+        X, y, n_classes, class_labels = load_classification_dataset(dataset_name)
 
     print(f"Dataset shape: {X.shape}")
     print(f"Number of classes: {n_classes}")
@@ -154,8 +187,8 @@ def setup_algorithm_params(args, dataset_name):
 
     Parameters
     ----------
-    args : argparse.Namespace
-        Command line arguments
+    args : argparse.Namespace or SimpleNamespace
+        Command line arguments or configuration object
     dataset_name : str
         Dataset name
 
@@ -209,8 +242,8 @@ def get_algorithm_identifier(args):
 
     Parameters
     ----------
-    args : argparse.Namespace
-        Command line arguments
+    args : argparse.Namespace or SimpleNamespace
+        Command line arguments or configuration object
 
     Returns
     -------
@@ -231,8 +264,8 @@ def create_visualization(model, args, root_dir, seed, verbose=True):
     ----------
     model : BinaryClassifier
         The trained classifier model
-    args : argparse.Namespace
-        Command line arguments
+    args : argparse.Namespace or SimpleNamespace
+        Command line arguments or configuration object
     root_dir : str
         Project root directory
     seed : int
@@ -293,14 +326,14 @@ def create_visualization(model, args, root_dir, seed, verbose=True):
         return None
 
 
-def run_experiment(args):
+def run_experiment(config):
     """
     Run a single binary classification experiment.
 
     Parameters
     ----------
-    args : argparse.Namespace
-        Command line arguments
+    config : argparse.Namespace or SimpleNamespace
+        Command line arguments or configuration object
 
     Returns
     -------
@@ -314,29 +347,29 @@ def run_experiment(args):
 
     # Load and split the dataset
     X_train, X_val, X_test, y_train, y_val, y_test, n_classes, class_labels = load_and_split_dataset(
-        args.dataset, args.seed
+        config.dataset, config.seed
     )
 
     # Set up algorithm parameters
-    algo_params = setup_algorithm_params(args, args.dataset)
+    algo_params = setup_algorithm_params(config, config.dataset)
 
     # Get algorithm display name
-    algorithm_display = args.algorithm.upper()
-    if args.algorithm == 'slim':
-        algorithm_display = f"{algorithm_display} ({args.slim_version})"
+    algorithm_display = config.algorithm.upper()
+    if config.algorithm == 'slim':
+        algorithm_display = f"{algorithm_display} ({config.slim_version})"
 
     # Print experiment information
-    print(f"Running binary classification with {algorithm_display} on {args.dataset}")
+    print(f"Running binary classification with {algorithm_display} on {config.dataset}")
     print(f"Parameters:")
-    print(f"  Population size: {args.pop_size}")
-    print(f"  Iterations: {args.n_iter}")
-    print(f"  Seed: {args.seed}")
-    print(f"  Fitness function: {args.fitness_function}")
-    print(f"  Use sigmoid: {args.use_sigmoid}")
-    print(f"  Sigmoid scale: {args.sigmoid_scale}")
-    print(f"  Max depth: {args.max_depth}")
-    if args.algorithm == 'slim':
-        print(f"  P-inflate: {args.p_inflate}")
+    print(f"  Population size: {config.pop_size}")
+    print(f"  Iterations: {config.n_iter}")
+    print(f"  Seed: {config.seed}")
+    print(f"  Fitness function: {config.fitness_function}")
+    print(f"  Use sigmoid: {config.use_sigmoid}")
+    print(f"  Sigmoid scale: {config.sigmoid_scale}")
+    print(f"  Max depth: {config.max_depth}")
+    if config.algorithm == 'slim':
+        print(f"  P-inflate: {config.p_inflate}")
     print()
 
     # Train the classifier
@@ -348,10 +381,10 @@ def run_experiment(args):
         y_train=y_train,
         X_val=X_val,
         y_val=y_val,
-        algorithm=args.algorithm,
-        use_sigmoid=args.use_sigmoid,
-        sigmoid_scale=args.sigmoid_scale,
-        fitness_function=args.fitness_function,
+        algorithm=config.algorithm,
+        use_sigmoid=config.use_sigmoid,
+        sigmoid_scale=config.sigmoid_scale,
+        fitness_function=config.fitness_function,
         **algo_params
     )
 
@@ -375,21 +408,21 @@ def run_experiment(args):
 
     # Save metrics to CSV file
     additional_info = {
-        'pop_size': args.pop_size,
-        'n_iter': args.n_iter,
-        'seed': args.seed,
-        'use_sigmoid': args.use_sigmoid,
-        'sigmoid_scale': args.sigmoid_scale,
-        'fitness_function': args.fitness_function,
-        'max_depth': args.max_depth
+        'pop_size': config.pop_size,
+        'n_iter': config.n_iter,
+        'seed': config.seed,
+        'use_sigmoid': config.use_sigmoid,
+        'sigmoid_scale': config.sigmoid_scale,
+        'fitness_function': config.fitness_function,
+        'max_depth': config.max_depth
     }
 
-    if args.algorithm == 'slim':
-        additional_info['slim_version'] = args.slim_version
-        additional_info['p_inflate'] = args.p_inflate
+    if config.algorithm == 'slim':
+        additional_info['slim_version'] = config.slim_version
+        additional_info['p_inflate'] = config.p_inflate
 
     # Get algorithm identifier for directory creation
-    algorithm_id = get_algorithm_identifier(args)
+    algorithm_id = get_algorithm_identifier(config)
 
     # Create a custom dictionary for metrics to avoid duplication
     custom_metrics = {}
@@ -417,20 +450,20 @@ def run_experiment(args):
     # Create metrics directory
     metrics_dir = create_result_directory(
         root_dir=root_dir,
-        dataset=args.dataset,
+        dataset=config.dataset,
         algorithm=algorithm_id,
         result_type="metrics"
     )
 
     # Generate timestamp for filename
     # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = os.path.join(metrics_dir, f"metrics_{args.seed}.csv")
+    csv_path = os.path.join(metrics_dir, f"metrics_{config.seed}.csv")
 
     # Prepare data for CSV
     metrics_data = {
         # Metadata
         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'dataset': args.dataset,
+        'dataset': config.dataset,
         'algorithm': algorithm_id,
         'training_time_seconds': training_time,
     }
@@ -454,16 +487,44 @@ def run_experiment(args):
 
     # Create visualization if requested
     vis_path = None
-    if args.save_visualization:
+    if config.save_visualization:
         vis_path = create_visualization(
             model=model,
-            args=args,
+            args=config,
             root_dir=root_dir,
-            seed=args.seed,
-            verbose=args.verbose
+            seed=config.seed,
+            verbose=config.verbose
         )
 
-    return metrics, training_time, csv_path, vis_path
+    return metrics, training_time, csv_path, vis_path, model
+
+
+def run_experiment_with_config(config_dict=None):
+    """
+    Run an experiment with a custom configuration dictionary.
+
+    Parameters
+    ----------
+    config_dict : dict, optional
+        Custom configuration parameters. If None, uses default configuration.
+
+    Returns
+    -------
+    tuple
+        metrics, training_time, metrics_file_path, visualization_path, model
+    """
+    # Start with default configuration
+    default_config = create_default_experiment_config()
+
+    # Override with custom configuration if provided
+    if config_dict:
+        default_config.update(config_dict)
+
+    # Convert dictionary to SimpleNamespace for compatibility with existing code
+    config = SimpleNamespace(**default_config)
+
+    # Run the experiment with the configuration
+    return run_experiment(config)
 
 
 def main():
@@ -487,3 +548,35 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    # config = {
+    #     # Dataset and algorithm selection
+    #     "dataset": "eeg",  # Name of the dataset to use
+    #     "algorithm": "slim",  # Algorithm to use: "gp", "gsgp", or "slim"
+    #     "slim_version": "SLIM+SIG2",  # SLIM algorithm version (only used when algorithm="slim")
+    #     # Options: "SLIM+SIG2", "SLIM*SIG2", "SLIM+ABS", "SLIM*ABS", "SLIM+SIG1", "SLIM*SIG1"
+    #
+    #     # Training parameters
+    #     "pop_size": 50,  # Population size
+    #     "n_iter": 10,  # Number of iterations/generations
+    #     "max_depth": 12,  # Maximum tree depth
+    #     "seed": 42,  # Random seed for reproducibility
+    #
+    #     # Classification parameters
+    #     "use_sigmoid": True,  # Whether to use sigmoid activation
+    #     "sigmoid_scale": 1.0,  # Scaling factor for sigmoid function
+    #     "fitness_function": "binary_rmse",  # Fitness function: "binary_rmse", "binary_mse", "binary_mae"
+    #
+    #     # Output control
+    #     "verbose": True,  # Print detailed output
+    #     "save_visualization": True,  # Save tree visualization
+    #
+    #     # SLIM specific parameters
+    #     "p_inflate": 0.5  # Probability of inflate mutation for SLIM algorithm
+    # }
+    #
+    # metrics, training_time, metrics_file, vis_path, model = run_experiment_with_config(config)
+    #
+    # print("\nExperiment completed successfully.")
+    # print(f"Training time: {training_time:.2f} seconds")
+    # print(f"Accuracy: {metrics['accuracy']:.4f}")

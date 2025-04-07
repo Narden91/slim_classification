@@ -81,7 +81,7 @@ def parse_arguments():
                         help="Population size")
     parser.add_argument("--n-iter", type=int, default=10,
                         help="Number of iterations")
-    parser.add_argument("--max-depth", type=int, default=8,
+    parser.add_argument("--max-depth", type=int, default=12,
                         help="Maximum tree depth")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility")
@@ -534,7 +534,7 @@ def main():
     print(f"SLIM-GSGP Binary Classification Example")
     print("=" * 60)
 
-    metrics, training_time, metrics_file, vis_path = run_experiment(args)
+    metrics, training_time, metrics_file, vis_path, _ = run_experiment(args)
 
     print("\nExperiment completed successfully.")
     print(f"Training time: {training_time:.2f} seconds")

@@ -67,10 +67,10 @@ def parse_arguments():
     # Dataset and algorithm selection
     parser.add_argument("--dataset", type=str, default="eeg",
                         help="Dataset to use.")
-    parser.add_argument("--algorithm", type=str, default="gp",
+    parser.add_argument("--algorithm", type=str, default="slim",
                         choices=["gp", "gsgp", "slim"],
                         help="Algorithm to use (gp, gsgp, slim)")
-    parser.add_argument("--slim-version", type=str, default="SLIM+ABS",
+    parser.add_argument("--slim-version", type=str, default="SLIM+ABS", # "SLIM+SIG2", "SLIM*SIG2", "SLIM+ABS", "SLIM*ABS", "SLIM+SIG1", "SLIM*SIG1"
                         choices=SLIM_VERSIONS,
                         help="SLIM algorithm version (only used when algorithm=slim)")
 
@@ -89,7 +89,7 @@ def parse_arguments():
                         help="Whether to use sigmoid activation")
     parser.add_argument("--sigmoid-scale", type=float, default=1.0,
                         help="Scaling factor for sigmoid")
-    parser.add_argument("--fitness-function", type=str, default="binary_mse",
+    parser.add_argument("--fitness-function", type=str, default="binary_rmse",
                         help="Fitness function to use: binary_rmse, binary_mse, binary_mae")
 
     # Output control

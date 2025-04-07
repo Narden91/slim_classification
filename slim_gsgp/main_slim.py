@@ -69,6 +69,7 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
 
     Parameters
     ----------
+    slim_version
     X_train: (torch.Tensor)
         Training input data.
     y_train: (torch.Tensor)

@@ -24,6 +24,8 @@ MAX_DEPTH=12
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
+mkdir -p logs/$DATASET
+mkdir -p logs/$DATASET/$ALGORITHM
 
 # Print Python version and path to help with debugging
 echo "============== SYSTEM INFO ==============="
@@ -43,7 +45,7 @@ for ((i=0; i<$NUM_RUNS; i++)); do
     echo "Starting run $((i+1))/$NUM_RUNS with seed $SEED..."
 
     # Create a temporary file for capturing the output
-    LOG_FILE="logs/run_${i}_seed_${SEED}.log"
+    LOG_FILE="logs/$DATASET/$ALGORITHM/run_${i+1}_seed_${SEED}.log"
 
 #    echo "Command:"
 #    echo "$PYTHON_PATH $SCRIPT_PATH --dataset=$DATASET --algorithm=$ALGORITHM --slim-version=$SLIM_VERSION --pop-size=$POP_SIZE --n-iter=$N_ITER --max-depth=$MAX_DEPTH --seed=$SEED"
@@ -84,7 +86,7 @@ echo "============== SUMMARY ================="
 SUCCEEDED=0
 FAILED=0
 for ((i=0; i<$NUM_RUNS; i++)); do
-    LOG_FILE="logs/run_${i}_seed_$((BASE_SEED + i)).log"
+    LOG_FILE="logs/$DATASET/$ALGORITHM/run_${i+1}_seed_$((BASE_SEED + i)).log"
     if grep -q "Experiment completed successfully" $LOG_FILE; then
         ((SUCCEEDED++))
     else

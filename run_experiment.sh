@@ -9,22 +9,23 @@ PYTHON_PATH="/mnt/c/Users/Emanuele/AppData/Local/Programs/Python/Python311/pytho
 SCRIPT_PATH="slim_gsgp/example_binary_classification.py"
 
 # Set the number of runs per dataset
-NUM_RUNS=1
+NUM_RUNS=30
 
 # Set the base seed (each run will use base_seed + run_index)
 BASE_SEED=42
 
 # Define the datasets to process
-DATASETS=("gina" "eeg" ) # ("gina" "eeg" "scene" "fertility" "liver" "ozone")
+DATASETS=("gina" "eeg" "scene" "fertility" "liver" "ozone") # ("gina" "eeg" "scene" "fertility" "liver" "ozone")
 
 ALGORITHM="slim"
-SLIM_VERSION="SLIM+SIG2" # ("SLIM+SIG2" "SLIM*SIG2" "SLIM+ABS" "SLIM*ABS" "SLIM+SIG1" "SLIM*SIG1")
+SLIM_VERSION=("SLIM+SIG2" "SLIM*SIG2" "SLIM+ABS" "SLIM*ABS" "SLIM+SIG1" "SLIM*SIG1") # ("SLIM+SIG2" "SLIM*SIG2" "SLIM+ABS" "SLIM*ABS" "SLIM+SIG1" "SLIM*SIG1")
 
 # Set other parameters
-POP_SIZE=50
-N_ITER=5
+POP_SIZE=500
+N_ITER=2000
 MAX_DEPTH="None"
 P_INFLATE=0.7
+SIGMOID_SCALE=0.0001
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
@@ -66,6 +67,7 @@ for DATASET in "${DATASETS[@]}"; do
             --n-iter=$N_ITER \
             --max-depth=$MAX_DEPTH \
             --p-inflate=$P_INFLATE \
+            --sigmoid-scale=$SIGMOID_SCALE \
             --seed=$SEED \
             > $LOG_FILE 2>&1
 

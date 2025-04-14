@@ -81,8 +81,20 @@ def parse_arguments():
                         help="Population size")
     parser.add_argument("--n-iter", type=int, default=10,
                         help="Number of iterations")
-    parser.add_argument("--max-depth", type=int, default=12,
+    
+    def parse_max_depth(value):
+        if value.strip().lower() == "none":
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError("max-depth must be an integer or 'None'")
+
+    parser.add_argument("--max-depth", type=parse_max_depth, default=None,
                         help="Maximum tree depth")
+
+    # parser.add_argument("--max-depth", type=int|str, default=12,
+    #                     help="Maximum tree depth")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility")
 
@@ -118,7 +130,7 @@ def create_default_experiment_config():
         # Training parameters
         "pop_size": 50,
         "n_iter": 10,
-        "max_depth": 8,
+        "max_depth": None,
         "seed": 42,
 
         # Classification parameters

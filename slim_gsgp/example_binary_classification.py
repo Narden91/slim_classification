@@ -45,9 +45,7 @@ from slim_gsgp.utils.utils import train_test_split, create_result_directory
 from slim_gsgp.datasets.data_loader import load_classification_dataset, load_classification_benchmark_dataset
 from slim_gsgp.classification import (
     train_binary_classifier,
-    register_classification_fitness_functions,
-    save_metrics_to_csv,
-    BinaryClassifier
+    register_classification_fitness_functions
 )
 from slim_gsgp.tree_visualizer import visualize_gp_tree
 
@@ -93,8 +91,6 @@ def parse_arguments():
     parser.add_argument("--max-depth", type=parse_max_depth, default=None,
                         help="Maximum tree depth")
 
-    # parser.add_argument("--max-depth", type=int|str, default=12,
-    #                     help="Maximum tree depth")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility")
 
@@ -464,7 +460,8 @@ def run_experiment(config):
         root_dir=root_dir,
         dataset=config.dataset,
         algorithm=algorithm_id,
-        result_type="metrics"
+        result_type="metrics",
+        experiment_name="Experiment_1"
     )
 
     # Generate timestamp for filename

@@ -702,7 +702,7 @@ def _evaluate_slim_individual(individual, ffunction, y, testing=False, operator=
         )
 
 
-def create_result_directory(root_dir, dataset, algorithm, result_type, strategy=None):
+def create_result_directory(root_dir, dataset, algorithm, result_type, strategy=None, experiment_name:str="results"):
     """
     Create and return a standardized directory path for results.
 
@@ -718,14 +718,15 @@ def create_result_directory(root_dir, dataset, algorithm, result_type, strategy=
         Type of result ('metrics' or 'visualizations')
     strategy : str, optional
         Classification strategy (for classification problems)
-
+    experiment_name : str
+        Experiment name
     Returns
     -------
     str
         Path to the created directory
     """
     # Create base results directory
-    results_dir = os.path.join(root_dir, "results")
+    results_dir = os.path.join(root_dir, experiment_name)
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
 

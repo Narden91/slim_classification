@@ -24,6 +24,7 @@ SLIM_VERSION="SLIM+SIG2" # ("SLIM+SIG2" "SLIM*SIG2" "SLIM+ABS" "SLIM*ABS" "SLIM+
 POP_SIZE=50
 N_ITER=5
 MAX_DEPTH="None"
+P_INFLATE=0.7
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
@@ -64,6 +65,7 @@ for DATASET in "${DATASETS[@]}"; do
             --pop-size=$POP_SIZE \
             --n-iter=$N_ITER \
             --max-depth=$MAX_DEPTH \
+            --p-inflate=$P_INFLATE \
             --seed=$SEED \
             > $LOG_FILE 2>&1
 

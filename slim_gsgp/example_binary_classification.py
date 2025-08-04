@@ -225,7 +225,7 @@ def setup_algorithm_params(args, dataset_name):
         algo_params['reconstruct'] = True
         algo_params['ms_lower'] = 0
         algo_params['ms_upper'] = 1
-        algo_params['log_path'] = os.path.join(log_dir, dataset_name, f"gsgp_run_seed_{args.seed}.csv")
+        algo_params['log_path'] = os.path.join(log_dir, dataset_name, args.algorithm , f"gsgp_run_seed_{args.seed}.csv")
 
     elif args.algorithm == 'slim':
         # For SLIM, set appropriate version
@@ -352,7 +352,7 @@ def run_experiment(config):
     root_dir = get_project_root()
 
     # Register binary fitness functions
-    register_classification_fitness_functions()
+    # register_classification_fitness_functions()
 
     # Load and split the dataset
     X_train, X_val, X_test, y_train, y_val, y_test, n_classes, class_labels = load_and_split_dataset(

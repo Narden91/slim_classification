@@ -129,6 +129,7 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     # ================================
     #         Input Validation
     # ================================
+    print(f"Log path: {log_path}")
 
     # Setting the log_path
     if log_path is None:
@@ -263,7 +264,7 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     # ================================
 
     optimizer = GSGP(pi_init=gsgp_pi_init, **gsgp_parameters)
-
+    
     optimizer.solve(
         X_train=X_train,
         X_test=X_test,

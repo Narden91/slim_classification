@@ -23,8 +23,11 @@
 Geometric Semantic Genetic Programming (GSGP) module.
 """
 
+import csv
+import os
 import random
 import time
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -108,6 +111,169 @@ class GSGP:
         GP_Tree.FUNCTIONS = pi_init["FUNCTIONS"]
         GP_Tree.TERMINALS = pi_init["TERMINALS"]
         GP_Tree.CONSTANTS = pi_init["CONSTANTS"]
+
+    def _calculate_generation_diversity(self, population):
+        """
+        Calculate population diversity based on semantics.
+        
+        Parameters
+        ----------
+        population : Population
+            The population for which to calculate diversity.
+            
+        Returns
+        -------
+        float
+            The calculated diversity value.
+        """
+        semantics_stack = torch.stack([
+            (
+                ind.train_semantics
+                if ind.train_semantics.shape != torch.Size([])
+                else ind.train_semantics.repeat(len(population.population[0].train_semantics))
+            )
+            for ind in population.population
+        ])
+        
+        return float(gsgp_pop_div_from_vectors(semantics_stack))
+
+    def _prepare_logging_info(self, population, log_level, X_train):
+        """
+        Prepare additional logging information based on the log level.
+        
+        Parameters
+        ----------
+        population : Population
+            The current population.
+        log_level : int
+            The logging level (1-4).
+        X_train : torch.Tensor
+            Training data for diversity calculation.
+            
+        Returns
+        -------
+        list
+            List of additional information for logging.
+        """
+        base_info = [
+            self.elite.test_fitness if hasattr(self.elite, 'test_fitness') and self.elite.test_fitness is not None else 0.0,
+            self.elite.nodes
+        ]
+        
+        if log_level == 1:
+            return base_info + [log_level]
+        
+        elif log_level == 2:
+            semantics_stack = torch.stack([
+                (
+                    ind.train_semantics
+                    if ind.train_semantics.shape != torch.Size([])
+                    else ind.train_semantics.repeat(len(X_train))
+                )
+                for ind in population.population
+            ])
+            gen_diversity = float(gsgp_pop_div_from_vectors(semantics_stack))
+            return base_info + [
+                gen_diversity,
+                np.std(population.fit),
+                log_level
+            ]
+        
+        elif log_level == 3:
+            nodes_info = " ".join([str(ind.nodes) for ind in population.population])
+            fitness_info = " ".join([str(f) for f in population.fit])
+            return base_info + [nodes_info, fitness_info, log_level]
+        
+        elif log_level == 4:
+            semantics_stack = torch.stack([
+                (
+                    ind.train_semantics
+                    if ind.train_semantics.shape != torch.Size([])
+                    else ind.train_semantics.repeat(len(X_train))
+                )
+                for ind in population.population
+            ])
+            gen_diversity = float(gsgp_pop_div_from_vectors(semantics_stack))
+            nodes_info = " ".join([str(ind.nodes) for ind in population.population])
+            fitness_info = " ".join([str(f) for f in population.fit])
+            return base_info + [
+                gen_diversity,
+                np.std(population.fit),
+                nodes_info,
+                fitness_info,
+                log_level
+            ]
+        
+        return base_info + [log_level]
+
+    def _log_evolution_to_csv(self, log_path, generation, timing, population, run_info, X_train):
+        """
+        Log evolution progress to a dedicated CSV file for analysis.
+        
+        Parameters
+        ----------
+        log_path : str
+            Base path for logging files.
+        generation : int
+            Current generation number.
+        timing : float
+            Time taken for this generation.
+        population : Population
+            Current population.
+        run_info : list
+            Information about the current run.
+        X_train : torch.Tensor
+            Training data for diversity calculation.
+        """
+        if log_path is None:
+            return
+            
+        # Create evolution log file path
+        base_path = Path(log_path)
+        evolution_csv_path = base_path.parent / f"{base_path.stem}_evolution.csv"
+        
+        # Ensure the directory exists
+        evolution_csv_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Calculate diversity
+        semantics_stack = torch.stack([
+            (
+                ind.train_semantics
+                if ind.train_semantics.shape != torch.Size([])
+                else ind.train_semantics.repeat(len(X_train))
+            )
+            for ind in population.population
+        ])
+        diversity = float(gsgp_pop_div_from_vectors(semantics_stack))
+        
+        # Prepare evolution data
+        evolution_data = {
+            'generation': generation,
+            'seed': self.seed,
+            'time_seconds': timing,
+            'elite_fitness': float(self.elite.fitness),
+            'elite_test_fitness': float(self.elite.test_fitness) if hasattr(self.elite, 'test_fitness') and self.elite.test_fitness is not None else None,
+            'elite_nodes': self.elite.nodes,
+            'population_size': len(population.population),
+            'avg_population_fitness': np.mean(population.fit) if population.fit else None,
+            'std_population_fitness': np.std(population.fit) if population.fit else None,
+            'avg_nodes_count': float(population.nodes_count) / len(population.population) if population.population else None,
+            'diversity': diversity,
+            'algorithm': 'GSGP'
+        }
+        
+        # Write to CSV
+        file_exists = evolution_csv_path.exists()
+        
+        with open(evolution_csv_path, 'a', newline='', encoding='utf-8') as csvfile:
+            fieldnames = list(evolution_data.keys())
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            # Write header only if file is new
+            if not file_exists:
+                writer.writeheader()
+            
+            writer.writerow(evolution_data)
 
     def solve(
         self,
@@ -207,76 +373,9 @@ class GSGP:
         if test_elite:
             self.elite.evaluate(ffunction, y=y_test, testing=True)
 
-        # logging the intial results, if the result level is != 0
-        if log != 0:
-            if log == 2:
-                add_info = [
-                    self.elite.test_fitness,
-                    self.elite.nodes,
-                    gsgp_pop_div_from_vectors(
-                        torch.stack(
-                            [
-                                (
-                                    ind.train_semantics
-                                    if ind.train_semantics.shape != torch.Size([])
-                                    else ind.train_semantics.repeat(len(X_train))
-                                )
-                                for ind in population.population
-                            ]
-                        )
-                    ),
-                    np.std(population.fit),
-                    log,
-                ]
-
-            elif log == 3:
-
-                add_info = [
-                    self.elite.test_fitness,
-                    self.elite.nodes,
-                    " ".join([str(ind.nodes_count) for ind in population.population]),
-                    " ".join([str(f) for f in population.fit]),
-                    log,
-                ]
-
-            elif log == 4:
-
-                add_info = [
-                    self.elite.test_fitness,
-                    self.elite.nodes,
-                    gsgp_pop_div_from_vectors(
-                        torch.stack(
-                            [
-                                (
-                                    ind.train_semantics
-                                    if ind.train_semantics.shape != torch.Size([])
-                                    else ind.train_semantics.repeat(len(X_train))
-                                )
-                                for ind in population.population
-                            ]
-                        )
-                    ),
-                    np.std(population.fit),
-                    " ".join([str(ind.nodes) for ind in population.population]),
-                    " ".join([str(f) for f in population.fit]),
-                    log,
-                ]
-
-            else:
-
-                add_info = [self.elite.test_fitness, self.elite.nodes, log]
-
-            # logging the results
-            logger(
-                log_path,
-                0,
-                self.elite.fitness,
-                end - start,
-                float(population.nodes_count),
-                additional_infos=add_info,
-                run_info=run_info,
-                seed=self.seed,
-            )
+        # Log initial population results to CSV
+        if log != 0 and log_path is not None:
+            self._log_evolution_to_csv(log_path, 0, end - start, population, run_info, X_train)
         # displaying the results on console, if applicable
         if verbose != 0:
             verbose_reporter(
@@ -464,83 +563,13 @@ class GSGP:
             if test_elite:
                 self.elite.evaluate(ffunction, y=y_test, testing=True)
 
-            # logging the results if log !=0
-            if log != 0:
-
-                if log == 2:
-                    add_info = [
-                        self.elite.test_fitness,
-                        self.elite.nodes,
-                        gsgp_pop_div_from_vectors(
-                            torch.stack(
-                                [
-                                    (
-                                        ind.train_semantics
-                                        if ind.train_semantics.shape != torch.Size([])
-                                        else ind.train_semantics.repeat(len(X_train))
-                                    )
-                                    for ind in population.population
-                                ]
-                            )
-                        ),
-                        np.std(population.fit),
-                        log,
-                    ]
-
-                elif log == 3:
-
-                    add_info = [
-                        self.elite.test_fitness,
-                        self.elite.nodes,
-                        " ".join(
-                            [str(ind.nodes_count) for ind in population.population]
-                        ),
-                        " ".join([str(f) for f in population.fit]),
-                        log,
-                    ]
-
-                elif log == 4:
-
-                    add_info = [
-                        self.elite.test_fitness,
-                        self.elite.nodes,
-                        gsgp_pop_div_from_vectors(
-                            torch.stack(
-                                [
-                                    (
-                                        ind.train_semantics
-                                        if ind.train_semantics.shape != torch.Size([])
-                                        else ind.train_semantics.repeat(len(X_train))
-                                    )
-                                    for ind in population.population
-                                ]
-                            )
-                        ),
-                        np.std(population.fit),
-                        " ".join([str(ind.nodes) for ind in population.population]),
-                        " ".join([str(f) for f in population.fit]),
-                        log,
-                    ]
-
-                else:
-
-                    add_info = [self.elite.test_fitness, self.elite.nodes, log]
-
-                # logging the results
-                logger(
-                    log_path,
-                    it,
-                    self.elite.fitness,
-                    end - start,
-                    float(population.nodes_count),
-                    additional_infos=add_info,
-                    run_info=run_info,
-                    seed=self.seed,
-                )
+            # Log generation results to CSV
+            if log != 0 and log_path is not None:
+                self._log_evolution_to_csv(log_path, it, end - start, population, run_info, X_train)
             # displaying the results on console, if applicable
             if verbose != 0:
                 verbose_reporter(
-                    run_info[-1],
+                    run_info[-1] if run_info else curr_dataset,
                     it,
                     self.elite.fitness,
                     self.elite.test_fitness,

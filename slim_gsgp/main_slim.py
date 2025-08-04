@@ -139,9 +139,6 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     # ================================
     #         Input Validation
     # ================================
-    
-    print(f"Log path: {log_path}")
-    
     if log_path is None:
         log_dir = create_result_directory(
             root_dir=os.getcwd(),

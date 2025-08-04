@@ -232,6 +232,9 @@ class SLIM_GSGP:
         base_path = Path(log_path)
         evolution_csv_path = base_path.parent / f"{base_path.stem}_evolution.csv"
         
+        # Ensure the directory exists
+        evolution_csv_path.parent.mkdir(parents=True, exist_ok=True)
+        
         # Prepare evolution data
         evolution_data = {
             'generation': generation,

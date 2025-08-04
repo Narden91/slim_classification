@@ -126,7 +126,7 @@ def logger(
             except:
                 additional_infos[0] = "None"
             infos.extend(additional_infos)
-
+        
         writer.writerow(infos)
 
 

@@ -66,7 +66,7 @@ def parse_arguments():
     # Dataset and algorithm selection
     parser.add_argument("--dataset", type=str, default="eeg",
                         help="Dataset to use.")
-    parser.add_argument("--algorithm", type=str, default="slim",
+    parser.add_argument("--algorithm", type=str, default="gsgp",
                         choices=["gp", "gsgp", "slim"],
                         help="Algorithm to use (gp, gsgp, slim)")
     parser.add_argument("--slim-version", type=str, default="SLIM+ABS",
@@ -211,7 +211,7 @@ def setup_algorithm_params(args, dataset_name):
         'n_iter': args.n_iter,
         'seed': args.seed,
         'dataset_name': dataset_name,
-        'max_depth': args.max_depth,
+        'max_depth': args.max_depth
     }
 
     # Create log directory if needed
@@ -225,7 +225,7 @@ def setup_algorithm_params(args, dataset_name):
         algo_params['reconstruct'] = True
         algo_params['ms_lower'] = 0
         algo_params['ms_upper'] = 1
-        algo_params['log_path'] = os.path.join(log_dir, f"gsgp_{args.seed}.csv")
+        algo_params['log_path'] = os.path.join(log_dir, dataset_name, f"gsgp_run_seed_{args.seed}.csv")
 
     elif args.algorithm == 'slim':
         # For SLIM, set appropriate version
@@ -235,11 +235,12 @@ def setup_algorithm_params(args, dataset_name):
         algo_params['ms_upper'] = 1
 
         # Create SLIM version specific log directory
-        slim_log_dir = os.path.join(log_dir, args.slim_version)
+        slim_log_dir = os.path.join(log_dir, dataset_name, args.slim_version)
         if not os.path.exists(slim_log_dir):
             os.makedirs(slim_log_dir)
 
-        algo_params['log_path'] = os.path.join(slim_log_dir, f"slim_{args.slim_version}_{args.seed}.csv")
+        # algo_params['log_path'] = os.path.join(slim_log_dir, f"slim_{args.slim_version}_{args.seed}.csv")
+        algo_params['log_path'] = os.path.join(slim_log_dir, f"run_seed_{args.seed}.csv")
 
     return algo_params
 
@@ -454,7 +455,7 @@ def run_experiment(config):
         if key not in ['accuracy', 'precision', 'recall', 'f1', 'specificity', 'confusion_matrix',
                        'true_positives', 'true_negatives', 'false_positives', 'false_negatives']:
             custom_metrics[key] = metrics[key]
-
+            
     # Create metrics directory
     metrics_dir = create_result_directory(
         root_dir=root_dir,
@@ -557,35 +558,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # config = {
-    #     # Dataset and algorithm selection
-    #     "dataset": "eeg",  # Name of the dataset to use
-    #     "algorithm": "slim",  # Algorithm to use: "gp", "gsgp", or "slim"
-    #     "slim_version": "SLIM+SIG2",  # SLIM algorithm version (only used when algorithm="slim")
-    #     # Options: "SLIM+SIG2", "SLIM*SIG2", "SLIM+ABS", "SLIM*ABS", "SLIM+SIG1", "SLIM*SIG1"
-    #
-    #     # Training parameters
-    #     "pop_size": 50,  # Population size
-    #     "n_iter": 10,  # Number of iterations/generations
-    #     "max_depth": 12,  # Maximum tree depth
-    #     "seed": 42,  # Random seed for reproducibility
-    #
-    #     # Classification parameters
-    #     "use_sigmoid": True,  # Whether to use sigmoid activation
-    #     "sigmoid_scale": 1.0,  # Scaling factor for sigmoid function
-    #     "fitness_function": "binary_rmse",  # Fitness function: "binary_rmse", "binary_mse", "binary_mae"
-    #
-    #     # Output control
-    #     "verbose": True,  # Print detailed output
-    #     "save_visualization": True,  # Save tree visualization
-    #
-    #     # SLIM specific parameters
-    #     "p_inflate": 0.5  # Probability of inflate mutation for SLIM algorithm
-    # }
-    #
-    # metrics, training_time, metrics_file, vis_path, model = run_experiment_with_config(config)
-    #
-    # print("\nExperiment completed successfully.")
-    # print(f"Training time: {training_time:.2f} seconds")
-    # print(f"Accuracy: {metrics['accuracy']:.4f}")

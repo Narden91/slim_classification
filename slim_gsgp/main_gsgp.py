@@ -131,8 +131,6 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     # ================================
 
     # Setting the log_path
-    # if log_path is None:
-    #     log_path = os.path.join(os.getcwd(), "log", "gsgp.csv")
     if log_path is None:
         log_dir = create_result_directory(
             root_dir=os.getcwd(),

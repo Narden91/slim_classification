@@ -49,6 +49,8 @@ def log_settings(path: str, settings_dict: list, unique_run_id: UUID) -> None:
 
     infos = [unique_run_id, settings_dict]
 
+    if not os.path.isdir(os.path.dirname(path)):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "a", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(infos)

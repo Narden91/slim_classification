@@ -66,7 +66,7 @@ def parse_arguments():
     # Dataset and algorithm selection
     parser.add_argument("--dataset", type=str, default="eeg",
                         help="Dataset to use.")
-    parser.add_argument("--algorithm", type=str, default="gsgp",
+    parser.add_argument("--algorithm", type=str, default="slim",
                         choices=["gp", "gsgp", "slim"],
                         help="Algorithm to use (gp, gsgp, slim)")
     parser.add_argument("--slim-version", type=str, default="SLIM+ABS",

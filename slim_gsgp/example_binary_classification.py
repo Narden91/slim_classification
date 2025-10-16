@@ -105,7 +105,7 @@ def parse_arguments():
     # Output control
     parser.add_argument("--verbose", type=bool, default=False,
                         help="Print detailed output")
-    parser.add_argument("--save-visualization", type=bool, default=True,
+    parser.add_argument("--save-visualization", type=bool, default=False,
                         help="Save tree visualization")
 
     # SLIM specific parameters
@@ -136,7 +136,7 @@ def create_default_experiment_config():
 
         # Output control
         "verbose": False,
-        "save_visualization": True,
+        "save_visualization": False,
 
         # SLIM specific parameters
         "p_inflate": 0.5
@@ -215,9 +215,10 @@ def setup_algorithm_params(args, dataset_name):
     }
 
     # Create log directory if needed
-    log_dir = os.path.join(get_project_root(), "log")
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    algorithm_id = get_algorithm_identifier(args)
+    results_dir = os.path.join(get_project_root(), "results", dataset_name, algorithm_id)
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
 
     # Add algorithm-specific parameters
     if args.algorithm == 'gsgp':
@@ -225,7 +226,7 @@ def setup_algorithm_params(args, dataset_name):
         algo_params['reconstruct'] = True
         algo_params['ms_lower'] = 0
         algo_params['ms_upper'] = 1
-        algo_params['log_path'] = os.path.join(log_dir, dataset_name, args.algorithm , f"gsgp_run_seed_{args.seed}.csv")
+        algo_params['log_path'] = os.path.join(results_dir, f"run_seed_{args.seed}.csv")
 
     elif args.algorithm == 'slim':
         # For SLIM, set appropriate version
@@ -234,13 +235,7 @@ def setup_algorithm_params(args, dataset_name):
         algo_params['ms_lower'] = 0
         algo_params['ms_upper'] = 1
 
-        # Create SLIM version specific log directory
-        slim_log_dir = os.path.join(log_dir, dataset_name, args.slim_version)
-        if not os.path.exists(slim_log_dir):
-            os.makedirs(slim_log_dir)
-
-        # algo_params['log_path'] = os.path.join(slim_log_dir, f"slim_{args.slim_version}_{args.seed}.csv")
-        algo_params['log_path'] = os.path.join(slim_log_dir, f"run_seed_{args.seed}.csv")
+        algo_params['log_path'] = os.path.join(results_dir, f"run_seed_{args.seed}.csv")
 
     return algo_params
 
@@ -400,20 +395,35 @@ def run_experiment(config):
     training_time = time.time() - start_time
     print(f"Training completed in {training_time:.2f} seconds")
 
-    # Evaluate on test set
-    print("\nEvaluating on test set:")
-    metrics = model.evaluate(X_test, y_test)
+    # Evaluate on train set
+    print("\nEvaluating on train set:")
+    train_metrics = model.evaluate(X_train, y_train)
 
-    # Print metrics
-    for name, value in metrics.items():
+    # Print train metrics
+    for name, value in train_metrics.items():
         if name != 'confusion_matrix':
             print(f"{name}: {value:.4f}")
 
-    # Print confusion matrix
-    print("\nConfusion Matrix:")
-    cm = metrics['confusion_matrix']
-    print(f"[{cm[0, 0]}, {cm[0, 1]}]")
-    print(f"[{cm[1, 0]}, {cm[1, 1]}]")
+    # Print train confusion matrix
+    print("\nTrain Confusion Matrix:")
+    cm_train = train_metrics['confusion_matrix']
+    print(f"[{cm_train[0, 0]}, {cm_train[0, 1]}]")
+    print(f"[{cm_train[1, 0]}, {cm_train[1, 1]}]")
+
+    # Evaluate on test set
+    print("\nEvaluating on test set:")
+    test_metrics = model.evaluate(X_test, y_test)
+
+    # Print test metrics
+    for name, value in test_metrics.items():
+        if name != 'confusion_matrix':
+            print(f"{name}: {value:.4f}")
+
+    # Print test confusion matrix
+    print("\nTest Confusion Matrix:")
+    cm_test = test_metrics['confusion_matrix']
+    print(f"[{cm_test[0, 0]}, {cm_test[0, 1]}]")
+    print(f"[{cm_test[1, 0]}, {cm_test[1, 1]}]")
 
     # Save metrics to CSV file
     additional_info = {
@@ -433,67 +443,86 @@ def run_experiment(config):
     # Get algorithm identifier for directory creation
     algorithm_id = get_algorithm_identifier(config)
 
-    # Create a custom dictionary for metrics to avoid duplication
-    custom_metrics = {}
+    # Create results directory
+    results_dir = os.path.join(root_dir, "results", config.dataset, algorithm_id)
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
 
-    # Add performance metrics
-    for key in ['accuracy', 'precision', 'recall', 'f1', 'specificity']:
-        if key in metrics:
-            custom_metrics[key] = metrics[key]
+    metrics_path = os.path.join(results_dir, "metrics.csv")
+    settings_path = os.path.join(results_dir, "settings.csv")
 
-    # Add confusion matrix values only once with consistent naming
-    if 'confusion_matrix' in metrics:
-        cm = metrics['confusion_matrix']
-        if cm.shape == (2, 2):  # Binary classification
-            custom_metrics['true_negatives'] = int(cm[0, 0])
-            custom_metrics['false_positives'] = int(cm[0, 1])
-            custom_metrics['false_negatives'] = int(cm[1, 0])
-            custom_metrics['true_positives'] = int(cm[1, 1])
-
-    # Handle any additional metrics that might be present
-    for key in metrics:
-        if key not in ['accuracy', 'precision', 'recall', 'f1', 'specificity', 'confusion_matrix',
-                       'true_positives', 'true_negatives', 'false_positives', 'false_negatives']:
-            custom_metrics[key] = metrics[key]
-            
-    # Create metrics directory
-    metrics_dir = create_result_directory(
-        root_dir=root_dir,
-        dataset=config.dataset,
-        algorithm=algorithm_id,
-        result_type="metrics",
-        experiment_name="Experiment_1"
-    )
-
-    # Generate timestamp for filename
-    # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = os.path.join(metrics_dir, f"metrics_{config.seed}.csv")
-
-    # Prepare data for CSV
+    # Prepare data for metrics CSV
     metrics_data = {
         # Metadata
         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'dataset': config.dataset,
         'algorithm': algorithm_id,
+        'seed': config.seed,
         'training_time_seconds': training_time,
     }
 
-    # Add metrics
-    for key, value in custom_metrics.items():
-        metrics_data[key] = value
+    # Add train metrics
+    for key in ['accuracy', 'precision', 'recall', 'f1', 'specificity']:
+        if key in train_metrics:
+            metrics_data[f'train_{key}'] = train_metrics[key]
+
+    # Add test metrics
+    for key in ['accuracy', 'precision', 'recall', 'f1', 'specificity']:
+        if key in test_metrics:
+            metrics_data[f'test_{key}'] = test_metrics[key]
+
+    # Add confusion matrix values
+    if 'confusion_matrix' in train_metrics:
+        cm = train_metrics['confusion_matrix']
+        if cm.shape == (2, 2):  # Binary classification
+            metrics_data['train_true_negatives'] = int(cm[0, 0])
+            metrics_data['train_false_positives'] = int(cm[0, 1])
+            metrics_data['train_false_negatives'] = int(cm[1, 0])
+            metrics_data['train_true_positives'] = int(cm[1, 1])
+
+    if 'confusion_matrix' in test_metrics:
+        cm = test_metrics['confusion_matrix']
+        if cm.shape == (2, 2):  # Binary classification
+            metrics_data['test_true_negatives'] = int(cm[0, 0])
+            metrics_data['test_false_positives'] = int(cm[0, 1])
+            metrics_data['test_false_negatives'] = int(cm[1, 0])
+            metrics_data['test_true_positives'] = int(cm[1, 1])
 
     # Add additional info
     for key, value in additional_info.items():
         metrics_data[key] = value
 
-    # Write to CSV
-    with open(csv_path, 'w', newline='') as csvfile:
+    # Write metrics to CSV (append mode)
+    file_exists = os.path.isfile(metrics_path)
+    with open(metrics_path, 'a', newline='') as csvfile:
         fieldnames = list(metrics_data.keys())
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
+        if not file_exists:
+            writer.writeheader()
         writer.writerow(metrics_data)
 
-    print(f"\nMetrics saved to: {csv_path}")
+    print(f"\nMetrics saved to: {metrics_path}")
+
+    # Save settings to CSV
+    settings_data = {
+        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'dataset': config.dataset,
+        'algorithm': algorithm_id,
+        'seed': config.seed,
+    }
+    for key, value in additional_info.items():
+        settings_data[key] = value
+
+    # Write settings to CSV (append mode)
+    file_exists = os.path.isfile(settings_path)
+    with open(settings_path, 'a', newline='') as csvfile:
+        fieldnames = list(settings_data.keys())
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(settings_data)
+
+    print(f"Settings saved to: {settings_path}")
 
     # Create visualization if requested
     vis_path = None
@@ -506,7 +535,7 @@ def run_experiment(config):
             verbose=config.verbose
         )
 
-    return metrics, training_time, csv_path, vis_path, model
+    return test_metrics, training_time, metrics_path, vis_path, model
 
 
 def run_experiment_with_config(config_dict=None):
@@ -548,6 +577,7 @@ def main():
 
     print("\nExperiment completed successfully.")
     print(f"Training time: {training_time:.2f} seconds")
+    print(f"Metrics saved to: {metrics_file}")
 
     # Print visualization path if available
     if vis_path:

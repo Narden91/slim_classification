@@ -47,10 +47,8 @@ def modified_sigmoid(scaling_factor: float = 1.0) -> Callable[[torch.Tensor], to
     """
 
     def sigmoid_func(tensor: torch.Tensor) -> torch.Tensor:
-        return torch.div(
-            1.0,
-            torch.add(1.0, torch.exp(torch.mul(-scaling_factor, tensor)))
-        )
+        # Use PyTorch's optimized sigmoid for better performance and numerical stability
+        return torch.sigmoid(scaling_factor * tensor)
 
     return sigmoid_func
 

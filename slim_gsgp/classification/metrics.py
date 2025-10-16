@@ -65,8 +65,8 @@ def calculate_binary_metrics(y_true: torch.Tensor, y_pred: torch.Tensor) -> Dict
         - true_positives, true_negatives, false_positives, false_negatives: Counts
     """
     # Convert to numpy for sklearn metrics
-    y_true_np = y_true.cpu().numpy() if isinstance(y_true, torch.Tensor) else y_true
-    y_pred_np = y_pred.cpu().numpy() if isinstance(y_pred, torch.Tensor) else y_pred
+    y_true_np = y_true.detach().cpu().numpy() if isinstance(y_true, torch.Tensor) else y_true
+    y_pred_np = y_pred.detach().cpu().numpy() if isinstance(y_pred, torch.Tensor) else y_pred
 
     # Calculate basic metrics
     metrics = {

@@ -30,6 +30,9 @@ from typing import Any, Dict, Union
 
 from .metrics import calculate_binary_metrics
 from .utils import modified_sigmoid, binary_sign_transform, register_classification_fitness_functions
+
+# Register fitness functions once at module import
+_register_success = register_classification_fitness_functions()
 from ..main_gp import gp
 from ..main_gsgp import gsgp
 from ..main_slim import slim
@@ -185,8 +188,8 @@ def train_binary_classifier(X_train, y_train, X_val=None, y_val=None, algorithm=
     BinaryClassifier
         Trained binary classifier.
     """
-    # Register fitness functions
-    register_classification_fitness_functions()
+    # Fitness functions are registered at module import
+    # register_classification_fitness_functions()
 
     # Ensure binary labels
     if len(torch.unique(y_train)) > 2:
@@ -206,7 +209,8 @@ def train_binary_classifier(X_train, y_train, X_val=None, y_val=None, algorithm=
         if 'reconstruct' not in kwargs:
             kwargs['reconstruct'] = True
 
-        kwargs = {k: v for k, v in kwargs.items() if k != 'max_depth'}
+        # GSGP supports max_depth, don't remove it
+        # kwargs = {k: v for k, v in kwargs.items() if k != 'max_depth'}
 
         model = gsgp(X_train=X_train, y_train=y_train, X_test=X_val, y_test=y_val,
                      fitness_function=fitness_function, **kwargs)

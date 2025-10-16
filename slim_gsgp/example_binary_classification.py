@@ -210,9 +210,12 @@ def setup_algorithm_params(args, dataset_name):
         'pop_size': args.pop_size,
         'n_iter': args.n_iter,
         'seed': args.seed,
-        'dataset_name': dataset_name,
-        'max_depth': args.max_depth
+        'dataset_name': dataset_name
     }
+
+    # Add max_depth for algorithms that support it
+    if args.algorithm in ['gp', 'slim']:
+        algo_params['max_depth'] = args.max_depth
 
     # Create log directory if needed
     algorithm_id = get_algorithm_identifier(args)
@@ -255,7 +258,7 @@ def get_algorithm_identifier(args):
         Algorithm identifier for directory creation
     """
     if args.algorithm == 'slim':
-        return f"slim_{args.slim_version}"
+        return f"slim_{args.slim_version.replace('*', 'MUL')}"
     else:
         return args.algorithm
 

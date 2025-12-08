@@ -20,13 +20,58 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
+from typing import Optional, Union
 
 import pandas as pd
 import torch
 
 
-def load_pandas_df(df: pd.DataFrame, X_y: bool = True):
+def get_default_device() -> torch.device:
     """
+    Get the default device for tensor operations.
+    
+    Returns
+    -------
+    torch.device
+        CUDA device if available, otherwise CPU.
+    """
+    return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+def to_device(X: torch.Tensor, y: Optional[torch.Tensor] = None, 
+              device: Optional[Union[str, torch.device]] = None):
+    """
+    Move tensors to the specified device.
+    
+    Parameters
+    ----------
+    X : torch.Tensor
+        Input features tensor.
+    y : torch.Tensor, optional
+        Target tensor.
+    device : str or torch.device, optional
+        Target device. If None or "auto", uses CUDA if available.
+        
+    Returns
+    -------
+    tuple or torch.Tensor
+        Tensors moved to the specified device.
+    """
+    if device is None or device == "auto":
+        device = get_default_device()
+    elif isinstance(device, str):
+        device = torch.device(device)
+    
+    X = X.to(device)
+    if y is not None:
+        y = y.to(device)
+        return X, y
+    return X
+
+
+def load_pandas_df(df: pd.DataFrame, X_y: bool = True, device: Optional[Union[str, torch.device]] = None):
+    """
+    Load a pandas DataFrame as PyTorch tensors.
 
     Parameters
     ----------
@@ -36,6 +81,9 @@ def load_pandas_df(df: pd.DataFrame, X_y: bool = True):
 
     X_y : bool, optional
         Indicates if the data is to be returned as two objects of type torch.Tensor, otherwise as single Tensor.
+    
+    device : str or torch.device, optional
+        Device to place tensors on. If None, uses CPU. Use "auto" for auto-detection.
 
 
     Returns
@@ -46,14 +94,29 @@ def load_pandas_df(df: pd.DataFrame, X_y: bool = True):
         torch.Tensor if X_y is set to False
 
     """
+    # Determine target device
+    if device is not None:
+        if device == "auto":
+            target_device = get_default_device()
+        elif isinstance(device, str):
+            target_device = torch.device(device)
+        else:
+            target_device = device
+    else:
+        target_device = None  # Keep on CPU by default for backward compatibility
 
     if X_y:
-        return (
-            torch.from_numpy(df.values[:, :-1]).float(),
-            torch.from_numpy(df.values[:, -1]).float(),
-        )
+        X = torch.from_numpy(df.values[:, :-1]).float()
+        y = torch.from_numpy(df.values[:, -1]).float()
+        if target_device is not None:
+            X = X.to(target_device)
+            y = y.to(target_device)
+        return X, y
     else:
-        return torch.from_numpy(df.values).float()
+        tensor = torch.from_numpy(df.values).float()
+        if target_device is not None:
+            tensor = tensor.to(target_device)
+        return tensor
 
 
 def load_resid_build_sale_price(X_y=True):

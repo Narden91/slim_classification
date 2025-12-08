@@ -32,6 +32,22 @@ from slim_gsgp.evaluators.fitness_functions import *
 from slim_gsgp.utils.utils import (get_best_min, get_best_max,
                                    protected_div)
 
+# Device configuration - auto-detect GPU if available
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+def get_device():
+    """Get the configured device for tensor operations."""
+    return DEVICE
+
+def set_device(device):
+    """Set the device for tensor operations."""
+    global DEVICE
+    if isinstance(device, str):
+        DEVICE = torch.device(device)
+    else:
+        DEVICE = device
+
+# Define functions and constants
 FUNCTIONS = {
     'add': {'function': torch.add, 'arity': 2},
     'subtract': {'function': torch.sub, 'arity': 2},
@@ -39,12 +55,19 @@ FUNCTIONS = {
     'divide': {'function': protected_div, 'arity': 2}
 }
 
+# Constants with device support
+def _create_constant(value):
+    """Create a constant tensor on the configured device."""
+    def constant_fn(_):
+        return torch.tensor(value, device=DEVICE)
+    return constant_fn
+
 CONSTANTS = {
-    'constant_2': lambda _: torch.tensor(2.0),
-    'constant_3': lambda _: torch.tensor(3.0),
-    'constant_4': lambda _: torch.tensor(4.0),
-    'constant_5': lambda _: torch.tensor(5.0),
-    'constant__1': lambda _: torch.tensor(-1.0)
+    'constant_2': _create_constant(2.0),
+    'constant_3': _create_constant(3.0),
+    'constant_4': _create_constant(4.0),
+    'constant_5': _create_constant(5.0),
+    'constant__1': _create_constant(-1.0)
 }
 
 # Set parameters

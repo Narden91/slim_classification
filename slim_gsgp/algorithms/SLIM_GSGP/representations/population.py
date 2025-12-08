@@ -153,11 +153,31 @@ class Population:
         -------
         None
         """
-        # Evaluates individuals' fitnesses
-        self.fit = Parallel(n_jobs=n_jobs)(
-            delayed(_evaluate_slim_individual)(individual, ffunction=ffunction, y=y, operator=operator
-            ) for individual in self.population)
+        import torch
+        
+        # Use optimized batch evaluation for single-threaded case (most common)
+        if n_jobs == 1:
+            # Get the appropriate operator function
+            op_func = torch.sum if operator == "sum" else torch.prod
+            
+            # Batch compute predictions for all individuals
+            self.fit = []
+            for individual in self.population:
+                # Aggregate semantics using the operator
+                pred = op_func(individual.train_semantics, dim=0)
+                # Clamp to avoid numerical issues
+                pred = torch.clamp(pred, -1e12, 1e12)
+                # Compute fitness
+                fitness = ffunction(y, pred)
+                individual.fitness = fitness
+                self.fit.append(fitness)
+        else:
+            # Fall back to parallel evaluation for multi-threaded case
+            self.fit = Parallel(n_jobs=n_jobs)(
+                delayed(_evaluate_slim_individual)(individual, ffunction=ffunction, y=y, operator=operator
+                ) for individual in self.population)
 
-        # Assigning individuals' fitness as an attribute
-        [self.population[i].__setattr__('fitness', f) for i, f in enumerate(self.fit)]
+            # Assigning individuals' fitness as an attribute
+            for i, f in enumerate(self.fit):
+                self.population[i].fitness = f
 

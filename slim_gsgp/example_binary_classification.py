@@ -20,6 +20,14 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
+# Ensure local project imports take priority over installed slim_gsgp package
+import sys
+import os
+_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 """
 Binary Classification Example
 
@@ -32,7 +40,6 @@ Example usage:
     python binary_classification.py --dataset=breast_cancer --algorithm=slim --slim-version=SLIM+SIG2 --seed=42
 """
 
-import os
 import time
 import argparse
 import torch
@@ -139,7 +146,10 @@ def create_default_experiment_config():
         "save_visualization": False,
 
         # SLIM specific parameters
-        "p_inflate": 0.5
+        "p_inflate": 0.5,
+        
+        # Performance options
+        "device": "auto",  # "auto", "cuda", or "cpu" - auto uses GPU if available
     }
 
 

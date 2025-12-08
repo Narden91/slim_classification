@@ -25,7 +25,6 @@ import random
 
 import numpy as np
 import torch
-from skimage.metrics import mean_squared_error
 
 from slim_gsgp.algorithms.GP.representations.tree_utils import (create_full_random_tree,
                                                                 create_grow_random_tree)

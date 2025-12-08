@@ -90,10 +90,11 @@ class BinaryClassifier:
 
         # Apply sigmoid if needed
         if self.use_sigmoid:
-            probs = modified_sigmoid(self.sigmoid_scale)(raw_preds)
+            # Use torch.sigmoid directly - more efficient than closure
+            probs = torch.sigmoid(self.sigmoid_scale * raw_preds)
         else:
-            # For sign-based prediction, we'll map output to [0,1] range
-            probs = binary_sign_transform(raw_preds)
+            # For sign-based prediction, map output to [0,1] range
+            probs = (raw_preds >= 0).float()
 
         # Return probabilities for both classes
         return torch.stack([1 - probs, probs], dim=1)
@@ -112,15 +113,16 @@ class BinaryClassifier:
         torch.Tensor
             Predicted class labels (0 or 1).
         """
+        # Get raw predictions
+        raw_preds = self.model.predict(X)
+        
         if self.use_sigmoid:
-            # Get raw predictions and apply sigmoid
-            raw_preds = self.model.predict(X)
-            probs = modified_sigmoid(self.sigmoid_scale)(raw_preds)
+            # Use torch.sigmoid directly with scaling - more efficient than closure
+            probs = torch.sigmoid(self.sigmoid_scale * raw_preds)
             return (probs > self.threshold).float()
         else:
             # Sign-based prediction (negative -> 0, non-negative -> 1)
-            raw_preds = self.model.predict(X)
-            return binary_sign_transform(raw_preds)
+            return (raw_preds >= 0).float()
 
     def evaluate(self, X: torch.Tensor, y: torch.Tensor) -> Dict[str, float]:
         """

@@ -72,8 +72,18 @@ def tournament_selection_min(pool_size):
         Individual
             The individual with the lowest fitness in the pool.
         """
-        pool = random.choices(pop.population, k=pool_size)
-        return pool[np.argmin([ind.fitness for ind in pool])]
+        # Use pre-computed fitness array for faster selection
+        pop_size = len(pop.population)
+        indices = random.sample(range(pop_size), k=min(pool_size, pop_size))
+        
+        # Use pop.fit if available, otherwise fall back to individual attributes
+        if pop.fit is not None:
+            pool_fitness = [pop.fit[i] for i in indices]
+        else:
+            pool_fitness = [pop.population[i].fitness for i in indices]
+        
+        winner_idx = indices[np.argmin(pool_fitness)]
+        return pop.population[winner_idx]
 
     return ts
 
@@ -101,7 +111,7 @@ def tournament_selection_max(pool_size):
         Returns
         -------
         Individual
-            The individual with the lowest fitness in the pool.
+            The individual with the highest fitness in the pool.
     Notes
     -----
     The returned function performs tournament selection by receiving a population and returning the best of {pool_size}
@@ -121,8 +131,18 @@ def tournament_selection_max(pool_size):
         Individual
             The individual with the highest fitness in the pool.
         """
-        pool = random.choices(pop.population, k=pool_size)
-        return pool[np.argmax([ind.fitness for ind in pool])]
+        # Use pre-computed fitness array for faster selection
+        pop_size = len(pop.population)
+        indices = random.sample(range(pop_size), k=min(pool_size, pop_size))
+        
+        # Use pop.fit if available, otherwise fall back to individual attributes
+        if pop.fit is not None:
+            pool_fitness = [pop.fit[i] for i in indices]
+        else:
+            pool_fitness = [pop.population[i].fitness for i in indices]
+        
+        winner_idx = indices[np.argmax(pool_fitness)]
+        return pop.population[winner_idx]
 
     return ts
 

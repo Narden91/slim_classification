@@ -112,6 +112,40 @@ predictions = final_tree.predict(X_test)
 print(float(rmse(y_true=y_test, y_pred=predictions)))
 ```
 
+### Experiment-level checkpointing
+
+Large benchmarking campaigns can now resume automatically thanks to the experiment registry.
+
+1. Describe your batch in JSON or YAML (example below) and store it as `experiments/eeg_batch.json`:
+
+```json
+{
+  "datasets": ["eeg"],
+  "algorithms": ["slim"],
+  "slim_versions": ["SLIM+ABS", "SLIM+SIG2"],
+  "seeds": [42, 43, 44],
+  "pop_size": 200,
+  "n_iter": 1000,
+  "p_inflate": 0.6,
+  "fitness_function": "binary_rmse"
+}
+```
+
+2. Execute the batch via the new runner:
+
+```sh
+python -m slim_gsgp.batch_runner \
+  --config experiments/eeg_batch.json \
+  --registry-path results/experiment_registry.json
+```
+
+Each `{dataset, algorithm, version, seed}` combination is recorded inside `results/experiment_registry.json`. If the
+process stops, run the same command again: completed entries are skipped while pending ones resume immediately. Use
+`--dry-run` to inspect the plan, `--list` to summarise registry status, and `--reset-running` to recover stuck runs.
+
+For single runs, `example_binary_classification.py` now accepts `--registry-path` and `--force-registry` so that even
+ad-hoc experiments gain the same resume guarantees.
+
 ## Arguments for the *gp*, *gsgp* and *slim* function
 
 ### Common arguments

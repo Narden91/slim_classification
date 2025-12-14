@@ -46,6 +46,7 @@ import torch
 import numpy as np
 import csv
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 from slim_gsgp.utils.utils import train_test_split, create_result_directory
@@ -55,6 +56,10 @@ from slim_gsgp.classification import (
     register_classification_fitness_functions
 )
 from slim_gsgp.tree_visualizer import visualize_gp_tree
+from slim_gsgp.utils.experiment_registry import (
+    ExperimentRegistry,
+    experiment_run_from_config,
+)
 
 # Valid SLIM algorithm versions
 SLIM_VERSIONS = ["SLIM+SIG2", "SLIM*SIG2", "SLIM+ABS", "SLIM*ABS", "SLIM+SIG1", "SLIM*SIG1"]
@@ -119,6 +124,26 @@ def parse_arguments():
     parser.add_argument("--p-inflate", type=float, default=0.5,
                         help="Probability of inflate mutation for SLIM algorithm")
 
+    # Checkpoint parameters
+    parser.add_argument("--checkpoint-enabled", action="store_true", default=False,
+                        help="Enable checkpointing to save and resume training")
+    parser.add_argument("--checkpoint-freq", type=int, default=10,
+                        help="How often to save checkpoints (every N generations)")
+    parser.add_argument("--checkpoint-path", type=str, default=None,
+                        help="Directory path for storing checkpoints")
+    parser.add_argument("--resume", action="store_true", default=False,
+                        help="Attempt to resume from existing checkpoint")
+    parser.add_argument("--no-clean-checkpoint", action="store_true", default=False,
+                        help="Keep checkpoint files after successful completion")
+
+    # Experiment-level checkpointing (registry)
+    parser.add_argument("--registry-path", type=str, default=None,
+                        help="Optional path to the experiment registry JSON file")
+    parser.add_argument("--experiment-id", type=str, default=None,
+                        help="Override the auto-generated registry identifier")
+    parser.add_argument("--force-registry", action="store_true", default=False,
+                        help="Force execution even if the registry marks the run as completed or running")
+
     return parser.parse_args()
 
 
@@ -150,6 +175,18 @@ def create_default_experiment_config():
         
         # Performance options
         "device": "auto",  # "auto", "cuda", or "cpu" - auto uses GPU if available
+        
+        # Checkpoint parameters
+        "checkpoint_enabled": False,
+        "checkpoint_freq": 10,
+        "checkpoint_path": None,
+        "resume": False,
+        "no_clean_checkpoint": False,
+
+        # Experiment registry defaults
+        "registry_path": None,
+        "experiment_id": None,
+        "force_registry": False,
     }
 
 
@@ -586,7 +623,34 @@ def main():
     print(f"SLIM-GSGP Binary Classification Example")
     print("=" * 60)
 
-    metrics, training_time, metrics_file, vis_path, _ = run_experiment(args)
+    registry_entry = None
+    registry = None
+    if args.registry_path:
+        registry = ExperimentRegistry(Path(args.registry_path))
+        registry_entry = experiment_run_from_config(args)
+        if args.experiment_id:
+            registry_entry.run_id = args.experiment_id
+        registry_entry = registry.register(registry_entry)
+
+        if registry_entry.status == "completed" and not args.force_registry:
+            print("Experiment already completed according to registry. Use --force-registry to rerun.")
+            return 0
+        if registry_entry.status == "running" and not args.force_registry:
+            print("Experiment is currently marked as running. Use --force-registry to reset the entry.")
+            return 1
+        if args.force_registry:
+            registry_entry = registry.reset(registry_entry.run_id)
+
+    try:
+        if registry_entry:
+            registry.mark_started(registry_entry.run_id)
+        metrics, training_time, metrics_file, vis_path, _ = run_experiment(args)
+        if registry_entry:
+            registry.mark_completed(registry_entry.run_id, metrics_path=metrics_file, duration=training_time)
+    except Exception as exc:
+        if registry_entry:
+            registry.mark_failed(registry_entry.run_id, str(exc))
+        raise
 
     print("\nExperiment completed successfully.")
     print(f"Training time: {training_time:.2f} seconds")

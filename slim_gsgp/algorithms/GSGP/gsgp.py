@@ -28,6 +28,7 @@ import os
 import random
 import time
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import torch
@@ -292,7 +293,12 @@ class GSGP:
         ffunction=None,
         reconstruct=False,
         n_elites=1,
-        n_jobs=1
+        n_jobs=1,
+        checkpoint_enabled: bool = False,
+        checkpoint_freq: int = 10,
+        checkpoint_path: Optional[str] = None,
+        resume: bool = True,
+        clean_checkpoint: bool = True
     ):
         """
         Execute the GSGP algorithm.
@@ -331,6 +337,16 @@ class GSGP:
             Number of elites. Default is 1.
         n_jobs : int
             The maximum number of jobs for parallel processing. Default is 1.
+        checkpoint_enabled : bool, optional
+            Whether to enable checkpointing. Default is False.
+        checkpoint_freq : int, optional
+            Save checkpoint every N generations. Default is 10.
+        checkpoint_path : str, optional
+            Custom checkpoint directory. If None, uses default location.
+        resume : bool, optional
+            Whether to resume from existing checkpoint. Default is True.
+        clean_checkpoint : bool, optional
+            Whether to delete checkpoint after successful completion. Default is True.
         """
 
         # setting the seeds
@@ -338,56 +354,139 @@ class GSGP:
         np.random.seed(self.seed)
         random.seed(self.seed)
 
-        # starting the time computation
-        start = time.time()
-
-        # creating the initial population
-        population = Population(
-            [
-                Tree(
-                    structure=tree,
-                    train_semantics=None,
-                    test_semantics=None,
-                    reconstruct=True,
-                )
-                for tree in self.initializer(**self.pi_init)
-            ]
-        )
-
-        # calculating the semantics for the initial population
-        population.calculate_semantics(X_train)
-
-        # calculating the testing semantics, if applicable
-        if test_elite:
-            population.calculate_semantics(X_test, testing=True)
-
-        # evaluating the initial population
-        population.evaluate(ffunction, y=y_train, n_jobs=n_jobs)
-
-        end = time.time()
-
-        # obtaining the elite(s)
-        self.elites, self.elite = self.find_elit_func(population, n_elites)
-
-        # testing the elite, if applicable
-        if test_elite:
-            self.elite.evaluate(ffunction, y=y_test, testing=True)
-
-        # Log initial population results to CSV
-        if log != 0 and log_path is not None:
-            self._log_evolution_to_csv(log_path, 0, end - start, population, run_info, X_train)
-        # displaying the results on console, if applicable
-        if verbose != 0:
-            verbose_reporter(
-                curr_dataset,
-                0,
-                self.elite.fitness,
-                self.elite.test_fitness,
-                end - start,
-                self.elite.nodes,
+        # Initialize checkpoint manager
+        checkpoint_manager = None
+        start_generation = 0
+        total_elapsed_time = 0.0
+        
+        if checkpoint_enabled:
+            # Determine checkpoint directory
+            if checkpoint_path is None:
+                if log_path is not None:
+                    checkpoint_dir = Path(log_path).parent / "checkpoints"
+                else:
+                    checkpoint_dir = get_checkpoint_dir(os.getcwd(), curr_dataset, "gsgp")
+            else:
+                checkpoint_dir = Path(checkpoint_path)
+            
+            # Create checkpoint manager
+            config_params = {
+                "pop_size": self.pop_size,
+                "n_iter": n_iter,
+                "fitness_function": str(ffunction),
+                "init_depth": self.pi_init.get("init_depth"),
+                "p_xo": self.p_xo
+            }
+            
+            checkpoint_manager = CheckpointManager(
+                checkpoint_dir=checkpoint_dir,
+                algorithm="gsgp",
+                dataset_name=curr_dataset,
+                seed=self.seed,
+                config_params=config_params,
+                enabled=checkpoint_enabled,
+                frequency=checkpoint_freq,
+                verbose=verbose > 0
             )
+            
+            # Try to resume from checkpoint
+            if resume:
+                checkpoint_data = checkpoint_manager.load()
+                if checkpoint_data is not None:
+                    start_generation = checkpoint_data["generation"]
+                    total_elapsed_time = checkpoint_data["elapsed_time"]
+                    
+                    # Restore population
+                    population = Population.from_dict(
+                        checkpoint_data["population_state"],
+                        FUNCTIONS=self.pi_init["FUNCTIONS"],
+                        TERMINALS=self.pi_init["TERMINALS"],
+                        CONSTANTS=self.pi_init["CONSTANTS"]
+                    )
+                    
+                    # Restore elites
+                    self.elite = Tree.from_dict(
+                        checkpoint_data["elite_state"],
+                        FUNCTIONS=self.pi_init["FUNCTIONS"],
+                        TERMINALS=self.pi_init["TERMINALS"],
+                        CONSTANTS=self.pi_init["CONSTANTS"]
+                    )
+                    self.elites = [
+                        Tree.from_dict(e, self.pi_init["FUNCTIONS"], 
+                                      self.pi_init["TERMINALS"], self.pi_init["CONSTANTS"])
+                        for e in checkpoint_data["elites_state"]
+                    ]
+                    
+                    if verbose > 0:
+                        print(f"[Checkpoint] Resuming from generation {start_generation}")
+
+        # Only create initial population if not resumed
+        if start_generation == 0:
+            # starting the time computation
+            start = time.time()
+
+            # creating the initial population
+            population = Population(
+                [
+                    Tree(
+                        structure=tree,
+                        train_semantics=None,
+                        test_semantics=None,
+                        reconstruct=True,
+                    )
+                    for tree in self.initializer(**self.pi_init)
+                ]
+            )
+
+            # calculating the semantics for the initial population
+            population.calculate_semantics(X_train)
+
+            # calculating the testing semantics, if applicable
+            if test_elite:
+                population.calculate_semantics(X_test, testing=True)
+
+            # evaluating the initial population
+            population.evaluate(ffunction, y=y_train, n_jobs=n_jobs)
+
+            end = time.time()
+            gen_time = end - start
+            total_elapsed_time += gen_time
+
+            # obtaining the elite(s)
+            self.elites, self.elite = self.find_elit_func(population, n_elites)
+
+            # testing the elite, if applicable
+            if test_elite:
+                self.elite.evaluate(ffunction, y=y_test, testing=True)
+
+            # Log initial population results to CSV
+            if log != 0 and log_path is not None:
+                self._log_evolution_to_csv(log_path, 0, gen_time, population, run_info, X_train)
+            
+            # displaying the results on console, if applicable
+            if verbose != 0:
+                verbose_reporter(
+                    curr_dataset,
+                    0,
+                    self.elite.fitness,
+                    self.elite.test_fitness,
+                    gen_time,
+                    self.elite.nodes,
+                )
+            
+            # Save initial checkpoint
+            if checkpoint_manager and checkpoint_manager.should_save(0):
+                checkpoint_manager.save(
+                    generation=0,
+                    population=population,
+                    elite=self.elite,
+                    elites=self.elites,
+                    elapsed_time=total_elapsed_time,
+                    n_iter=n_iter
+                )
+
         # EVOLUTIONARY PROCESS
-        for it in range(1, n_iter + 1, 1):
+        for it in range(start_generation + 1, n_iter + 1, 1):
             # creating the empty offpsring population
             offs_pop, start = [], time.time()
             # adding the elite(s) to the offspring population
@@ -555,6 +654,8 @@ class GSGP:
             population = offs_pop
 
             end = time.time()
+            gen_time = end - start
+            total_elapsed_time += gen_time
 
             # replacing the elites
             self.elites, self.elite = self.find_elit_func(population, n_elites)
@@ -565,7 +666,8 @@ class GSGP:
 
             # Log generation results to CSV
             if log != 0 and log_path is not None:
-                self._log_evolution_to_csv(log_path, it, end - start, population, run_info, X_train)
+                self._log_evolution_to_csv(log_path, it, gen_time, population, run_info, X_train)
+            
             # displaying the results on console, if applicable
             if verbose != 0:
                 verbose_reporter(
@@ -573,6 +675,21 @@ class GSGP:
                     it,
                     self.elite.fitness,
                     self.elite.test_fitness,
-                    end - start,
+                    gen_time,
                     self.elite.nodes,
                 )
+            
+            # Save checkpoint if needed
+            if checkpoint_manager and checkpoint_manager.should_save(it):
+                checkpoint_manager.save(
+                    generation=it,
+                    population=population,
+                    elite=self.elite,
+                    elites=self.elites,
+                    elapsed_time=total_elapsed_time,
+                    n_iter=n_iter
+                )
+
+        # Clean up checkpoint after successful completion
+        if checkpoint_manager and clean_checkpoint:
+            checkpoint_manager.delete()

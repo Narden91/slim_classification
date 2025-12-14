@@ -241,7 +241,7 @@ class SLIM_GSGP:
             'seed': self.seed,
             'time_seconds': timing,
             'elite_fitness': float(self.elite.fitness),
-            'elite_test_fitness': float(self.elite.test_fitness) if hasattr(self.elite, 'test_fitness') else None,
+            'elite_test_fitness': float(self.elite.test_fitness) if hasattr(self.elite, 'test_fitness') and self.elite.test_fitness is not None else None,
             'elite_nodes': self.elite.nodes_count,
             'population_size': len(population.population),
             'avg_population_fitness': np.mean(population.fit) if population.fit else None,

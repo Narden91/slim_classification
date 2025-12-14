@@ -25,7 +25,7 @@ POP_SIZE=500
 N_ITER=2000
 MAX_DEPTH="None"
 P_INFLATE=0.7
-SIGMOID_SCALE=0.0001
+SIGMOID_SCALE=0.01
 
 # Create logs directory if it doesn't exist
 mkdir -p logs

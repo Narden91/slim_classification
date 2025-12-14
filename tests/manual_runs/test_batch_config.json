@@ -1,0 +1,12 @@
+{
+  "datasets": ["eeg"],
+  "algorithms": ["slim"],
+  "slim_versions": ["SLIM+ABS"],
+  "seeds": [42, 43],
+  "pop_size": 10,
+  "n_iter": 2,
+  "p_inflate": 0.5,
+  "fitness_function": "binary_rmse",
+  "use_sigmoid": true,
+  "sigmoid_scale": 1.0
+}

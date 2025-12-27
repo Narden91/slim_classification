@@ -61,6 +61,14 @@ from slim_gsgp.utils.experiment_registry import (
     experiment_run_from_config,
 )
 
+# Import explainability module (optional - graceful fallback if not available)
+try:
+    from slim_gsgp.explainability import TreeExporter
+    EXPLAINABILITY_AVAILABLE = True
+except ImportError:
+    EXPLAINABILITY_AVAILABLE = False
+    TreeExporter = None
+
 # Valid SLIM algorithm versions
 SLIM_VERSIONS = ["SLIM+SIG2", "SLIM*SIG2", "SLIM+ABS", "SLIM*ABS", "SLIM+SIG1", "SLIM*SIG1"]
 
@@ -120,6 +128,15 @@ def parse_arguments():
     parser.add_argument("--save-visualization", type=bool, default=False,
                         help="Save tree visualization")
 
+    # Explainability / Tree export arguments
+    parser.add_argument("--export-tree", action="store_true", default=False,
+                        help="Export final tree (visualization and formula)")
+    parser.add_argument("--export-format", type=str, default="all",
+                        choices=["html", "svg", "pdf", "text", "all"],
+                        help="Export format for tree: html (interactive), svg, pdf, text, or all")
+    parser.add_argument("--export-path", type=str, default=None,
+                        help="Custom output directory for tree exports (default: results folder)")
+
     # SLIM specific parameters
     parser.add_argument("--p-inflate", type=float, default=0.5,
                         help="Probability of inflate mutation for SLIM algorithm")
@@ -169,6 +186,11 @@ def create_default_experiment_config():
         # Output control
         "verbose": False,
         "save_visualization": False,
+
+        # Explainability / Tree export
+        "export_tree": False,
+        "export_format": "all",
+        "export_path": None,
 
         # SLIM specific parameters
         "p_inflate": 0.5,
@@ -380,6 +402,90 @@ def create_visualization(model, args, root_dir, seed, verbose=True):
         return None
 
 
+def export_tree_and_formula(model, config, root_dir, algorithm_id, verbose=True):
+    """
+    Export the final tree structure and formula for SLIM models.
+    
+    Parameters
+    ----------
+    model : BinaryClassifier
+        The trained classification model.
+    config : SimpleNamespace or argparse.Namespace
+        Configuration object with export settings.
+    root_dir : str
+        Root directory of the project.
+    algorithm_id : str
+        Algorithm identifier for directory organization.
+    verbose : bool
+        Whether to print progress messages.
+        
+    Returns
+    -------
+    dict or None
+        Dictionary of exported file paths, or None if export failed.
+    """
+    if not EXPLAINABILITY_AVAILABLE:
+        if verbose:
+            print("Warning: Explainability module not available. Skipping tree export.")
+        return None
+    
+    # Only export for SLIM models
+    if config.algorithm != 'slim':
+        if verbose:
+            print(f"Note: Tree export is optimized for SLIM models. Current algorithm: {config.algorithm}")
+    
+    # Check if model has the required structure
+    if not hasattr(model, 'model') or not hasattr(model.model, 'collection'):
+        if verbose:
+            print("Warning: Model does not have exportable tree structure.")
+        return None
+    
+    try:
+        # Get the underlying SLIM individual
+        individual = model.model
+        
+        # Set the version attribute if not present
+        if not hasattr(individual, 'version') and hasattr(config, 'slim_version'):
+            individual.version = config.slim_version
+        
+        # Determine output directory
+        if getattr(config, 'export_path', None):
+            output_dir = config.export_path
+        else:
+            output_dir = os.path.join(root_dir, "results", config.dataset, algorithm_id, "exports")
+        
+        # Create exporter
+        slim_version = getattr(config, 'slim_version', None)
+        exporter = TreeExporter(slim_version=slim_version)
+        
+        # Print formula to console
+        if verbose:
+            exporter.print_formula(individual)
+        
+        # Export to files
+        export_format = getattr(config, 'export_format', 'all')
+        seed = getattr(config, 'seed', None)
+        
+        print(f"\nExporting final tree (format: {export_format}):")
+        results = exporter.export(
+            individual=individual,
+            output_dir=output_dir,
+            format=export_format,
+            filename="final_tree",
+            seed=seed,
+            verbose=verbose
+        )
+        
+        return results
+        
+    except Exception as e:
+        if verbose:
+            print(f"Warning: Failed to export tree: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        return None
+
+
 def run_experiment(config):
     """
     Run a single binary classification experiment.
@@ -583,6 +689,17 @@ def run_experiment(config):
             root_dir=root_dir,
             seed=config.seed,
             verbose=config.verbose
+        )
+
+    # Export tree and formula if requested
+    export_paths = None
+    if getattr(config, 'export_tree', False):
+        export_paths = export_tree_and_formula(
+            model=model,
+            config=config,
+            root_dir=root_dir,
+            algorithm_id=algorithm_id,
+            verbose=True
         )
 
     return test_metrics, training_time, metrics_path, vis_path, model

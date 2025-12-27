@@ -23,6 +23,7 @@
 SLIM_GSGP Class for Evolutionary Computation using PyTorch.
 """
 
+from typing import Callable, Dict, List, Optional, Union, Tuple, Any
 import csv
 import os
 import random
@@ -35,6 +36,14 @@ from slim_gsgp.algorithms.GP.representations.tree import Tree as GP_Tree
 from slim_gsgp.algorithms.GSGP.representations.tree import Tree
 from slim_gsgp.algorithms.SLIM_GSGP.representations.individual import Individual
 from slim_gsgp.algorithms.SLIM_GSGP.representations.population import Population
+from slim_gsgp.algorithms.SLIM_GSGP.constants import (
+    DEFAULT_POPULATION_SIZE,
+    DEFAULT_MUTATION_PROB,
+    DEFAULT_CROSSOVER_PROB,
+    DEFAULT_INFLATE_PROB,
+    DEFAULT_DEFLATE_PROB,
+    OPERATOR_SUM,
+)
 from slim_gsgp.utils.diversity import gsgp_pop_div_from_vectors
 from slim_gsgp.utils.logger import logger
 from slim_gsgp.utils.utils import verbose_reporter
@@ -44,25 +53,25 @@ class SLIM_GSGP:
 
     def __init__(
         self,
-        pi_init,
-        initializer,
-        selector,
-        inflate_mutator,
-        deflate_mutator,
-        ms,
-        crossover,
-        find_elit_func,
-        p_m=1,
-        p_xo=0,
-        p_inflate=0.3,
-        p_deflate=0.7,
-        pop_size=100,
-        seed=0,
-        operator="sum",
-        copy_parent=True,
-        two_trees=True,
-        settings_dict=None,
-    ):
+        pi_init: Dict[str, Any],
+        initializer: Callable,
+        selector: Callable,
+        inflate_mutator: Callable,
+        deflate_mutator: Callable,
+        ms: Callable,
+        crossover: Callable,
+        find_elit_func: Callable,
+        p_m: float = DEFAULT_MUTATION_PROB,
+        p_xo: float = DEFAULT_CROSSOVER_PROB,
+        p_inflate: float = DEFAULT_INFLATE_PROB,
+        p_deflate: float = DEFAULT_DEFLATE_PROB,
+        pop_size: int = DEFAULT_POPULATION_SIZE,
+        seed: int = 0,
+        operator: str = OPERATOR_SUM,
+        copy_parent: bool = True,
+        two_trees: bool = True,
+        settings_dict: Optional[Dict] = None,
+    ) -> None:
         """
         Initialize the SLIM_GSGP algorithm with given parameters.
 
@@ -133,7 +142,7 @@ class SLIM_GSGP:
         GP_Tree.TERMINALS = pi_init["TERMINALS"]
         GP_Tree.CONSTANTS = pi_init["CONSTANTS"]
 
-    def _calculate_generation_diversity(self, population):
+    def _calculate_generation_diversity(self, population: Population) -> float:
         """
         Calculate population diversity based on the operator type.
         
@@ -147,20 +156,21 @@ class SLIM_GSGP:
         float
             The calculated diversity value.
         """
-        if self.operator == "sum":
-            semantics_stack = torch.stack([
-                torch.sum(ind.train_semantics, dim=0) 
-                for ind in population.population
-            ])
-        else:  # operator == "prod"
-            semantics_stack = torch.stack([
-                torch.prod(ind.train_semantics, dim=0) 
-                for ind in population.population
-            ])
+        with torch.no_grad():
+            if self.operator == "sum":
+                semantics_stack = torch.stack([
+                    torch.sum(ind.train_semantics, dim=0) 
+                    for ind in population.population
+                ])
+            else:  # operator == "prod"
+                semantics_stack = torch.stack([
+                    torch.prod(ind.train_semantics, dim=0) 
+                    for ind in population.population
+                ])
         
         return float(gsgp_pop_div_from_vectors(semantics_stack))
 
-    def _prepare_logging_info(self, population, log_level):
+    def _prepare_logging_info(self, population: Population, log_level: int) -> List[Any]:
         """
         Prepare additional logging information based on the log level.
         
@@ -208,7 +218,8 @@ class SLIM_GSGP:
         
         return base_info + [log_level]
 
-    def _log_evolution_to_csv(self, log_path, generation, timing, population, run_info):
+    def _log_evolution_to_csv(self, log_path: Optional[str], generation: int, 
+                             timing: float, population: Population, run_info: List) -> None:
         """
         Log evolution progress to a dedicated CSV file for analysis.
         
@@ -269,7 +280,7 @@ class SLIM_GSGP:
             
             writer.writerow(evolution_data)
 
-    def _copy_individual(self, parent, reconstruct):
+    def _copy_individual(self, parent: Individual, reconstruct: bool) -> Individual:
         """
         Create a copy of an individual.
         
@@ -303,23 +314,23 @@ class SLIM_GSGP:
 
     def solve(
         self,
-        X_train,
-        X_test,
-        y_train,
-        y_test,
-        curr_dataset,
-        run_info,
-        n_iter=20,
-        elitism=True,
-        log=0,
-        verbose=0,
-        test_elite=False,
-        log_path=None,
-        ffunction=None,
-        max_depth=17,
-        n_elites=1,
-        reconstruct=True,
-        n_jobs=1):
+        X_train: Union[torch.Tensor, np.ndarray],
+        X_test: Optional[Union[torch.Tensor, np.ndarray]],
+        y_train: Union[torch.Tensor, np.ndarray],
+        y_test: Optional[Union[torch.Tensor, np.ndarray]],
+        curr_dataset: Union[str, int],
+        run_info: List,
+        n_iter: int = 20,
+        elitism: bool = True,
+        log: int = 0,
+        verbose: int = 0,
+        test_elite: bool = False,
+        log_path: Optional[str] = None,
+        ffunction: Optional[Callable[[torch.Tensor, torch.Tensor], float]] = None,
+        max_depth: int = 17,
+        n_elites: int = 1,
+        reconstruct: bool = True,
+        n_jobs: int = 1) -> None:
         """
         Solve the optimization problem using SLIM_GSGP.
 

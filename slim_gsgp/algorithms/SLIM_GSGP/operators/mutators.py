@@ -23,6 +23,7 @@
 Mutation Functions for SLIM GSGP.
 """
 
+from typing import Callable, Dict, Optional
 import random
 
 import torch
@@ -32,7 +33,7 @@ from slim_gsgp.utils.utils import get_random_tree
 
 
 # two tree function
-def two_trees_delta(operator="sum"):
+def two_trees_delta(operator: str = "sum") -> Callable:
     """
     Generate a function for the two-tree delta mutation.
 
@@ -68,7 +69,7 @@ def two_trees_delta(operator="sum"):
     representing whether to use the train or test semantics, and returns the calculated semantics of the new individual.
     """
 
-    def tt_delta(tr1, tr2, ms, testing):
+    def tt_delta(tr1: Individual, tr2: Individual, ms: float, testing: bool) -> torch.Tensor:
         """
         Performs delta mutation between two trees based on their semantics.
 
@@ -112,7 +113,7 @@ def two_trees_delta(operator="sum"):
     return tt_delta
 
 
-def one_tree_delta(operator="sum", sig=False):
+def one_tree_delta(operator: str = "sum", sig: bool = False) -> Callable:
     """
     Generate a function for the one-tree delta mutation.
 
@@ -146,7 +147,7 @@ def one_tree_delta(operator="sum", sig=False):
     The returned function ('ot_delta_{operator}_{sig}') takes as input one individual, the mutation step,
     a boolean representing whether to use the train or test semantics, and returns the mutated semantics.
     """
-    def ot_delta(tr1, ms, testing):
+    def ot_delta(tr1: Individual, ms: float, testing: bool) -> torch.Tensor:
         """
         Performs delta mutation on one tree based on its semantics.
 
@@ -233,7 +234,13 @@ def one_tree_delta(operator="sum", sig=False):
     return ot_delta
 
 
-def inflate_mutation(FUNCTIONS, TERMINALS,CONSTANTS,two_trees=True,operator="sum",single_tree_sigmoid=False,sig=False):
+def inflate_mutation(FUNCTIONS: Dict, 
+                    TERMINALS: Dict, 
+                    CONSTANTS: Dict, 
+                    two_trees: bool = True, 
+                    operator: str = "sum", 
+                    single_tree_sigmoid: bool = False, 
+                    sig: bool = False) -> Callable:
     """
     Generate an inflate mutation function.
 
@@ -289,15 +296,15 @@ def inflate_mutation(FUNCTIONS, TERMINALS,CONSTANTS,two_trees=True,operator="sum
     and applying either delta mutation or sigmoid mutation based on the parameters.
     """
     def inflate(
-        individual,
-        ms,
-        X,
-        max_depth=8,
-        p_c=0.1,
-        X_test=None,
-        grow_probability=1,
-        reconstruct=True,
-    ):
+        individual: Individual,
+        ms: float,
+        X: torch.Tensor,
+        max_depth: int = 8,
+        p_c: float = 0.1,
+        X_test: Optional[torch.Tensor] = None,
+        grow_probability: float = 1,
+        reconstruct: bool = True,
+    ) -> Individual:
         """
         Perform inflate mutation on the given Individual.
 
@@ -400,10 +407,9 @@ def inflate_mutation(FUNCTIONS, TERMINALS,CONSTANTS,two_trees=True,operator="sum
         )
         # creating the offspring individual, by adding the new block to it
         offs = Individual(
-            collection=[*individual.collection, new_block] if reconstruct else None,
+            collection=individual.collection + [new_block] if reconstruct else None,
             train_semantics=torch.stack(
-                [
-                    *individual.train_semantics,
+                list(individual.train_semantics) + [
                     (
                         new_block.train_semantics
                         if new_block.train_semantics.shape != torch.Size([])
@@ -414,8 +420,7 @@ def inflate_mutation(FUNCTIONS, TERMINALS,CONSTANTS,two_trees=True,operator="sum
             test_semantics=(
                 (
                     torch.stack(
-                        [
-                            *individual.test_semantics,
+                        list(individual.test_semantics) + [
                             (
                                 new_block.test_semantics
                                 if new_block.test_semantics.shape != torch.Size([])
@@ -431,10 +436,10 @@ def inflate_mutation(FUNCTIONS, TERMINALS,CONSTANTS,two_trees=True,operator="sum
         )
         # computing offspring attributes
         offs.size = individual.size + 1
-        offs.nodes_collection = [*individual.nodes_collection, new_block.nodes]
+        offs.nodes_collection = individual.nodes_collection + [new_block.nodes]
         offs.nodes_count = sum(offs.nodes_collection) + (offs.size - 1)
 
-        offs.depth_collection = [*individual.depth_collection, new_block.depth]
+        offs.depth_collection = individual.depth_collection + [new_block.depth]
         offs.depth = max(
             [
                 depth - (i - 1) if i != 0 else depth
@@ -447,7 +452,7 @@ def inflate_mutation(FUNCTIONS, TERMINALS,CONSTANTS,two_trees=True,operator="sum
     return inflate
 
 
-def deflate_mutation(individual, reconstruct):
+def deflate_mutation(individual: Individual, reconstruct: bool) -> Individual:
     """
     Perform deflate mutation on a given Individual by removing a random 'block'.
 
@@ -467,27 +472,19 @@ def deflate_mutation(individual, reconstruct):
     mut_point = random.randint(1, individual.size - 1)
 
     # removing the block from the individual and creating a new Individual
+    # Optimized: use slicing which is faster than unpacking
     offs = Individual(
         collection=(
-            [
-                *individual.collection[:mut_point],
-                *individual.collection[mut_point + 1 :],
-            ]
+            individual.collection[:mut_point] + individual.collection[mut_point + 1:]
             if reconstruct
             else None
         ),
         train_semantics=torch.stack(
-            [
-                *individual.train_semantics[:mut_point],
-                *individual.train_semantics[mut_point + 1 :],
-            ]
+            list(individual.train_semantics[:mut_point]) + list(individual.train_semantics[mut_point + 1:])
         ),
         test_semantics=(
             torch.stack(
-                [
-                    *individual.test_semantics[:mut_point],
-                    *individual.test_semantics[mut_point + 1 :],
-                ]
+                list(individual.test_semantics[:mut_point]) + list(individual.test_semantics[mut_point + 1:])
             )
             if individual.test_semantics is not None
             else None
@@ -497,16 +494,14 @@ def deflate_mutation(individual, reconstruct):
 
     # computing offspring attributes
     offs.size = individual.size - 1
-    offs.nodes_collection = [
-        *individual.nodes_collection[:mut_point],
-        *individual.nodes_collection[mut_point + 1 :],
-    ]
+    offs.nodes_collection = (
+        individual.nodes_collection[:mut_point] + individual.nodes_collection[mut_point + 1:]
+    )
     offs.nodes_count = sum(offs.nodes_collection) + (offs.size - 1)
 
-    offs.depth_collection = [
-        *individual.depth_collection[:mut_point],
-        *individual.depth_collection[mut_point + 1 :],
-    ]
+    offs.depth_collection = (
+        individual.depth_collection[:mut_point] + individual.depth_collection[mut_point + 1:]
+    )
     offs.depth = max(
         [
             depth - (i - 1) if i != 0 else depth

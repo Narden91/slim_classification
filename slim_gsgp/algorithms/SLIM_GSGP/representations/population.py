@@ -22,11 +22,13 @@
 """
 Population Class for SLIM GSGP using PyTorch.
 """
+from typing import List, Optional, Callable
+import torch
 from slim_gsgp.utils.utils import _evaluate_slim_individual
 from joblib import Parallel, delayed
 
 class Population:
-    def __init__(self, population):
+    def __init__(self, population: List) -> None:
         """
         Initialize the Population with a list of individuals.
 
@@ -46,7 +48,7 @@ class Population:
         self.train_semantics = None
         self.test_semantics = None
 
-    def calculate_semantics(self, inputs, testing=False):
+    def calculate_semantics(self, inputs: torch.Tensor, testing: bool = False) -> None:
         """
         Calculate the semantics for each individual in the population.
 
@@ -62,10 +64,9 @@ class Population:
         None
         """
         # computing the semantics for all the individuals in the population
-        [
-            individual.calculate_semantics(inputs, testing)
-            for individual in self.population
-        ]
+        with torch.no_grad():
+            for individual in self.population:
+                individual.calculate_semantics(inputs, testing)
 
         # computing testing semantics, if applicable
         if testing:
@@ -80,7 +81,7 @@ class Population:
                 individual.train_semantics for individual in self.population
             ]
 
-    def __len__(self):
+    def __len__(self) -> int:
         """
         Return the size of the population.
 
@@ -91,7 +92,7 @@ class Population:
         """
         return self.size
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: int):
         """
         Get an individual from the population by index.
 
@@ -107,7 +108,9 @@ class Population:
         """
         return self.population[item]
 
-    def evaluate_no_parall(self, ffunction, y, operator="sum"):
+    def evaluate_no_parall(self, ffunction: Callable[[torch.Tensor, torch.Tensor], float], 
+                           y: torch.Tensor, 
+                           operator: str = "sum") -> None:
         """
         Evaluate the population using a fitness function (without parallelization).
         This function is not currently in use, but has been retained for potential future use
@@ -134,7 +137,10 @@ class Population:
         # defining the fitness of the population to be a list with the fitnesses of all individuals in the population
         self.fit = [individual.fitness for individual in self.population]
 
-    def evaluate(self, ffunction, y, operator="sum", n_jobs=1):
+    def evaluate(self, ffunction: Callable[[torch.Tensor, torch.Tensor], float], 
+                 y: torch.Tensor, 
+                 operator: str = "sum", 
+                 n_jobs: int = 1) -> None:
         """
         Evaluate the population using a fitness function.
 
@@ -153,24 +159,23 @@ class Population:
         -------
         None
         """
-        import torch
-        
         # Use optimized batch evaluation for single-threaded case (most common)
         if n_jobs == 1:
             # Get the appropriate operator function
             op_func = torch.sum if operator == "sum" else torch.prod
             
-            # Batch compute predictions for all individuals
-            self.fit = []
-            for individual in self.population:
-                # Aggregate semantics using the operator
-                pred = op_func(individual.train_semantics, dim=0)
-                # Clamp to avoid numerical issues
-                pred = torch.clamp(pred, -1e12, 1e12)
-                # Compute fitness
-                fitness = ffunction(y, pred)
-                individual.fitness = fitness
-                self.fit.append(fitness)
+            # Batch compute predictions for all individuals with torch.no_grad for performance
+            with torch.no_grad():
+                self.fit = []
+                for individual in self.population:
+                    # Aggregate semantics using the operator
+                    pred = op_func(individual.train_semantics, dim=0)
+                    # Clamp to avoid numerical issues
+                    pred = torch.clamp(pred, -1e12, 1e12)
+                    # Compute fitness
+                    fitness = ffunction(y, pred)
+                    individual.fitness = fitness
+                    self.fit.append(fitness)
         else:
             # Fall back to parallel evaluation for multi-threaded case
             self.fit = Parallel(n_jobs=n_jobs)(

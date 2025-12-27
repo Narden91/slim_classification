@@ -23,9 +23,11 @@
 Individual Class and Utility Functions for SLIM GSGP.
 """
 
+from typing import List, Optional, Callable, Union
 import torch
 from slim_gsgp.algorithms.GSGP.representations.tree_utils import apply_tree
 from slim_gsgp.utils.utils import check_slim_version
+from slim_gsgp.algorithms.SLIM_GSGP.constants import SEMANTICS_CLAMP_MIN, SEMANTICS_CLAMP_MAX
 
 class Individual:
     """
@@ -57,15 +59,19 @@ class Individual:
         The maximum depth of the tree.
     """
 
-    def __init__(self, collection, train_semantics, test_semantics, reconstruct):
+    def __init__(self, 
+                 collection: Optional[List], 
+                 train_semantics: Optional[torch.Tensor], 
+                 test_semantics: Optional[torch.Tensor], 
+                 reconstruct: bool) -> None:
         """
         Initialize an Individual with a collection of trees and their associated semantics.
 
         Parameters
         ----------
-        collection : list
+        collection : list or None
             The list of trees representing the individual.
-        train_semantics : torch.Tensor
+        train_semantics : torch.Tensor or None
             Training semantics associated with the individual.
         test_semantics : torch.Tensor or None
             Testing semantics associated with the individual. Can be None if not applicable.
@@ -96,7 +102,7 @@ class Individual:
         self.fitness = None
         self.test_fitness = None
 
-    def calculate_semantics(self, inputs, testing=False):
+    def calculate_semantics(self, inputs: torch.Tensor, testing: bool = False) -> None:
         """
         Calculate the semantics for the Individual. Result is stored as an attribute associated with the object.
 
@@ -115,34 +121,38 @@ class Individual:
         # computing the testing semantics, if not existent
         if testing and self.test_semantics is None:
             # getting the semantics for every tree in the collection
-            [tree.calculate_semantics(inputs, testing) for tree in self.collection]
-            self.test_semantics = torch.stack(
-                [
-                    (
-                        tree.test_semantics
-                        if tree.test_semantics.shape != torch.Size([])
-                        else tree.test_semantics.repeat(len(inputs))
-                    )
-                    for tree in self.collection
-                ]
-            )
+            with torch.no_grad():
+                for tree in self.collection:
+                    tree.calculate_semantics(inputs, testing)
+                self.test_semantics = torch.stack(
+                    [
+                        (
+                            tree.test_semantics
+                            if tree.test_semantics.shape != torch.Size([])
+                            else tree.test_semantics.repeat(len(inputs))
+                        )
+                        for tree in self.collection
+                    ]
+                )
 
         # computing the training semantics
         elif self.train_semantics is None:
             # getting the semantics for every tree in the collection
-            [tree.calculate_semantics(inputs, testing) for tree in self.collection]
-            self.train_semantics = torch.stack(
-                [
-                    (
-                        tree.train_semantics
-                        if tree.train_semantics.shape != torch.Size([])
-                        else tree.train_semantics.repeat(len(inputs))
-                    )
-                    for tree in self.collection
-                ]
-            )
+            with torch.no_grad():
+                for tree in self.collection:
+                    tree.calculate_semantics(inputs, testing)
+                self.train_semantics = torch.stack(
+                    [
+                        (
+                            tree.train_semantics
+                            if tree.train_semantics.shape != torch.Size([])
+                            else tree.train_semantics.repeat(len(inputs))
+                        )
+                        for tree in self.collection
+                    ]
+                )
 
-    def __len__(self):
+    def __len__(self) -> int:
         """
         Return the size of the individual.
 
@@ -153,7 +163,7 @@ class Individual:
         """
         return self.size
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: int):
         """
         Get a tree from the individual by index.
 
@@ -169,7 +179,10 @@ class Individual:
         """
         return self.collection[item]
 
-    def evaluate(self, ffunction, y, testing=False, operator="sum"):
+    def evaluate(self, ffunction: Callable[[torch.Tensor, torch.Tensor], float], 
+                 y: torch.Tensor, 
+                 testing: bool = False, 
+                 operator: str = "sum") -> None:
         """
         Evaluate the Individual using a fitness function.
 
@@ -200,8 +213,8 @@ class Individual:
                 y,
                 torch.clamp(
                     operator(self.test_semantics, dim=0),
-                    -1000000000000.0,
-                    1000000000000.0,
+                    SEMANTICS_CLAMP_MIN,
+                    SEMANTICS_CLAMP_MAX,
                 ),
             )
         # computing the training fitness
@@ -210,12 +223,12 @@ class Individual:
                 y,
                 torch.clamp(
                     operator(self.train_semantics, dim=0),
-                    -1000000000000.0,
-                    1000000000000.0,
+                    SEMANTICS_CLAMP_MIN,
+                    SEMANTICS_CLAMP_MAX,
                 ),
             )
 
-    def predict(self, data):
+    def predict(self, data: Union[torch.Tensor, 'np.ndarray']) -> torch.Tensor:
         """
             Predict the output for the given input data using the model's collection of trees
             and the specified slim_gsgp version.
@@ -311,10 +324,10 @@ class Individual:
 
         # clamping the semantics
         return torch.clamp(
-            operator(torch.stack(semantics), dim=0), -1000000000000.0, 1000000000000.0
+            operator(torch.stack(semantics), dim=0), SEMANTICS_CLAMP_MIN, SEMANTICS_CLAMP_MAX
         )
 
-    def get_tree_representation(self):
+    def get_tree_representation(self) -> str:
         """
         Returns a string representation of the trees in the Individual.
 
@@ -349,7 +362,7 @@ class Individual:
             ]
         )
 
-    def print_tree_representation(self):
+    def print_tree_representation(self) -> None:
         """
         Prints a string representation of the trees in the Individual.
 

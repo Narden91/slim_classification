@@ -22,40 +22,40 @@
 """
 Classification module for SLIM-GSGP.
 
-This module provides tools for binary and multiclass classification
-using the SLIM-GSGP framework, wrapping underlying algorithms (GP, GSGP, SLIM)
-with appropriate interfaces for classification tasks.
+This module provides tools for binary classification using the SLIM-GSGP framework,
+wrapping underlying algorithms (GP, GSGP, SLIM) with appropriate interfaces.
 
-Components:
+Main Components
+---------------
 - BinaryClassifier: Wrapper class for binary classification
 - train_binary_classifier: Function to train a binary classifier
-- register_classification_fitness_functions: Utility to register fitness functions
+- ClassifierConfig: Configuration dataclass for classifier parameters
 
-Example:
-    >>> from slim_gsgp.classification import train_binary_classifier, register_classification_fitness_functions
-    >>> # Register fitness functions
-    >>> register_classification_fitness_functions()
-    >>> # Train a classifier
-    >>> model = train_binary_classifier(
-    ...     X_train, y_train, X_val, y_val,
-    ...     algorithm='gp',
-    ...     fitness_function='binary_rmse',
-    ...     dataset_name='breast_cancer'
-    ... )
-    >>> # Evaluate the model
-    >>> metrics = model.evaluate(X_test, y_test)
-    >>> print(f"Accuracy: {metrics['accuracy']:.4f}")
+Example
+-------
+>>> from slim_gsgp.classification import train_binary_classifier
+>>> 
+>>> # Train a classifier
+>>> classifier = train_binary_classifier(
+...     X_train, y_train, X_val, y_val,
+...     algorithm='gp',
+...     fitness_function='binary_rmse'
+... )
+>>> 
+>>> # Evaluate the model
+>>> metrics = classifier.evaluate(X_test, y_test)
+>>> print(f"Accuracy: {metrics['accuracy']:.4f}")
 """
 
+import logging
+
 from .binary import BinaryClassifier, train_binary_classifier
+from .config import ClassifierConfig, TrainingConfig
 from .metrics import calculate_binary_metrics, save_metrics_to_csv
 from .utils import (
     register_classification_fitness_functions,
     apply_sigmoid,
-    modified_sigmoid,  # Deprecated, kept for backward compatibility
-    binary_threshold_transform,
-    binary_sign_transform,
-    create_binary_fitness_function
+    create_binary_fitness_function,
 )
 from .exceptions import (
     ClassificationError,
@@ -63,26 +63,33 @@ from .exceptions import (
     AlgorithmNotFoundError,
     InvalidThresholdError,
     InvalidShapeError,
-    FitnessRegistrationError
+    FitnessRegistrationError,
 )
 
-# Attempt to register fitness functions at module import
-# This is a convenience - users can also call it explicitly
-import logging
+# Backward compatibility exports (deprecated)
+from .utils import (
+    modified_sigmoid,  # Deprecated: use apply_sigmoid instead
+    binary_threshold_transform,
+    binary_sign_transform,
+)
+
 logger = logging.getLogger(__name__)
 
+# Auto-register fitness functions at module import
 try:
-    _registration_success = register_classification_fitness_functions()
-    logger.info("Binary classification fitness functions registered successfully")
-except Exception as e:
-    logger.warning(f"Could not auto-register fitness functions: {e}")
+    register_classification_fitness_functions()
+except FitnessRegistrationError as e:
+    logger.warning(f"Auto-registration failed: {e}")
     logger.warning("Call register_classification_fitness_functions() explicitly before training")
 
 __all__ = [
-    # Main classes and functions
+    # Main API
     'BinaryClassifier',
     'train_binary_classifier',
-    'register_classification_fitness_functions',
+    
+    # Configuration
+    'ClassifierConfig',
+    'TrainingConfig',
     
     # Metrics
     'calculate_binary_metrics',
@@ -90,9 +97,7 @@ __all__ = [
     
     # Utilities
     'apply_sigmoid',
-    'modified_sigmoid',
-    'binary_threshold_transform',
-    'binary_sign_transform',
+    'register_classification_fitness_functions',
     'create_binary_fitness_function',
     
     # Exceptions
@@ -102,4 +107,9 @@ __all__ = [
     'InvalidThresholdError',
     'InvalidShapeError',
     'FitnessRegistrationError',
+    
+    # Deprecated (backward compatibility)
+    'modified_sigmoid',
+    'binary_threshold_transform',
+    'binary_sign_transform',
 ]

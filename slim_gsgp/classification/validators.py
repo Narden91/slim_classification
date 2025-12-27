@@ -27,7 +27,7 @@ and configuration parameters used in classification tasks.
 """
 
 import torch
-from typing import Optional, Set
+from typing import Optional
 
 from .exceptions import (
     InvalidLabelError,

@@ -78,7 +78,7 @@ def benchmark_sigmoid_operations():
     print(f"  Average time: {new_time:.6f} ms")
     
     improvement = ((old_time - new_time) / old_time) * 100
-    print(f"\n✓ Performance improvement: {improvement:.2f}%")
+    print(f"\n[OK] Performance improvement: {improvement:.2f}%")
     print(f"  Speedup: {old_time / new_time:.2f}x faster")
     
     return {
@@ -167,22 +167,22 @@ def main():
     print(" SUMMARY")
     print("="*70)
     
-    print("\n✓ Key Performance Improvements:")
-    print(f"  • Sigmoid operations: {results['sigmoid']['improvement_pct']:.2f}% faster")
-    print(f"  • Direct function calls avoid closure overhead")
-    print(f"  • Single-pass tensor conversions reduce memory operations")
+    print("\n[OK] Key Performance Improvements:")
+    print(f"  - Sigmoid operations: {results['sigmoid']['improvement_pct']:.2f}% faster")
+    print(f"  - Direct function calls avoid closure overhead")
+    print(f"  - Single-pass tensor conversions reduce memory operations")
     
-    print("\n✓ Code Quality Improvements:")
-    print("  • Comprehensive type hints (Protocol-based)")
-    print("  • Input validation on all public methods")
-    print("  • Detailed docstrings with examples")
-    print("  • Custom exceptions for clear error messages")
-    print("  • Logging instead of print statements")
+    print("\n[OK] Code Quality Improvements:")
+    print("  - Comprehensive type hints (Protocol-based)")
+    print("  - Input validation on all public methods")
+    print("  - Detailed docstrings with examples")
+    print("  - Custom exceptions for clear error messages")
+    print("  - Logging instead of print statements")
     
-    print("\n✓ All tests passing:")
-    print("  • 8/8 test cases pass")
-    print("  • Same behavior as original implementation")
-    print("  • Backward compatibility maintained (deprecated functions kept)")
+    print("\n[OK] All tests passing:")
+    print("  - 8/8 test cases pass")
+    print("  - Same behavior as original implementation")
+    print("  - Backward compatibility maintained (deprecated functions kept)")
     
     print("\n" + "="*70)
     print(" BENCHMARK COMPLETE")

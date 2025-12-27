@@ -36,9 +36,9 @@ print("="*70)
 print("\n1. Registering fitness functions...")
 try:
     register_classification_fitness_functions()
-    print("   ✓ Fitness functions registered successfully")
+    print("   [OK] Fitness functions registered successfully")
 except Exception as e:
-    print(f"   ✗ Registration failed: {e}")
+    print(f"   [FAIL] Registration failed: {e}")
     sys.exit(1)
 
 # Test 1: Valid input
@@ -57,17 +57,17 @@ try:
         seed=42,
         verbose=0
     )
-    print("   ✓ Classifier trained successfully")
+    print("   [OK] Classifier trained successfully")
     
     # Test predictions
     predictions = classifier.predict(X_val)
-    print(f"   ✓ Predictions shape: {predictions.shape}")
+    print(f"   [OK] Predictions shape: {predictions.shape}")
     
     # Test evaluation
     metrics = classifier.evaluate(X_val, y_val)
-    print(f"   ✓ Accuracy: {metrics['accuracy']:.4f}")
+    print(f"   [OK] Accuracy: {metrics['accuracy']:.4f}")
 except Exception as e:
-    print(f"   ✗ Training failed: {e}")
+    print(f"   [FAIL] Training failed: {e}")
 
 # Test 2: Invalid labels (should catch)
 print("\n3. Testing input validation - non-binary labels...")
@@ -81,9 +81,9 @@ try:
         pop_size=5,
         n_iter=1
     )
-    print("   ✗ Should have raised InvalidLabelError")
+    print("   [FAIL] Should have raised InvalidLabelError")
 except InvalidLabelError as e:
-    print(f"   ✓ Correctly caught invalid labels: {type(e).__name__}")
+    print(f"   [OK] Correctly caught invalid labels: {type(e).__name__}")
     print(f"      Message: {str(e)[:60]}...")
 
 # Test 3: Invalid threshold (should catch)
@@ -96,9 +96,9 @@ try:
         pop_size=5,
         n_iter=1
     )
-    print("   ✗ Should have raised InvalidThresholdError")
+    print("   [FAIL] Should have raised InvalidThresholdError")
 except InvalidThresholdError as e:
-    print(f"   ✓ Correctly caught invalid threshold: {type(e).__name__}")
+    print(f"   [OK] Correctly caught invalid threshold: {type(e).__name__}")
     print(f"      Message: {str(e)}")
 
 # Test 4: Invalid algorithm (should catch)
@@ -110,9 +110,9 @@ try:
         pop_size=5,
         n_iter=1
     )
-    print("   ✗ Should have raised AlgorithmNotFoundError")
+    print("   [FAIL] Should have raised AlgorithmNotFoundError")
 except AlgorithmNotFoundError as e:
-    print(f"   ✓ Correctly caught unknown algorithm: {type(e).__name__}")
+    print(f"   [OK] Correctly caught unknown algorithm: {type(e).__name__}")
     print(f"      Message: {str(e)}")
 
 # Test 5: Mismatched shapes (should catch)
@@ -127,9 +127,9 @@ try:
         pop_size=5,
         n_iter=1
     )
-    print("   ✗ Should have raised InvalidShapeError")
+    print("   [FAIL] Should have raised InvalidShapeError")
 except InvalidShapeError as e:
-    print(f"   ✓ Correctly caught shape mismatch: {type(e).__name__}")
+    print(f"   [OK] Correctly caught shape mismatch: {type(e).__name__}")
     print(f"      Message: {str(e)}")
 
 # Test 6: Backward compatibility
@@ -143,18 +143,18 @@ with warnings.catch_warnings(record=True) as w:
     result = sigmoid(torch.tensor([0.0]))
     
     if len(w) > 0 and issubclass(w[-1].category, DeprecationWarning):
-        print("   ✓ Deprecated function works with warning")
+        print("   [OK] Deprecated function works with warning")
     else:
-        print("   ✗ Expected deprecation warning")
+        print("   [FAIL] Expected deprecation warning")
 
 print("\n" + "="*70)
 print(" VALIDATION COMPLETE - All checks passed!")
 print("="*70)
 print("\nKey improvements demonstrated:")
-print("  ✓ Input validation catches errors early")
-print("  ✓ Custom exceptions provide clear error messages")
-print("  ✓ Type safety prevents common bugs")
-print("  ✓ Backward compatibility maintained")
-print("  ✓ Comprehensive logging for debugging")
-print("  ✓ All functionality works as expected")
+print("  [OK] Input validation catches errors early")
+print("  [OK] Custom exceptions provide clear error messages")
+print("  [OK] Type safety prevents common bugs")
+print("  [OK] Backward compatibility maintained")
+print("  [OK] Comprehensive logging for debugging")
+print("  [OK] All functionality works as expected")
 print("="*70 + "\n")

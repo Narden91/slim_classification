@@ -27,7 +27,7 @@ This module provides tools for binary classification using GP, GSGP, or SLIM mod
 
 import logging
 import torch
-from typing import Dict, Optional, Protocol, Union
+from typing import Dict, Optional, Protocol, TYPE_CHECKING, Union
 
 from .metrics import calculate_binary_metrics
 from .utils import apply_sigmoid
@@ -36,9 +36,12 @@ from .validators import (
     validate_threshold,
     validate_scaling_factor,
     validate_tensor_shape,
-    validate_matching_shapes
+    validate_matching_shapes,
 )
-from .exceptions import AlgorithmNotFoundError, InvalidLabelError
+from .exceptions import AlgorithmNotFoundError
+
+if TYPE_CHECKING:
+    from .config import ClassifierConfig
 
 from ..main_gp import gp
 from ..main_gsgp import gsgp
@@ -88,14 +91,23 @@ class BinaryClassifier:
     ... )
     >>> predictions = classifier.predict(X_test)
     >>> metrics = classifier.evaluate(X_test, y_test)
+    
+    >>> # Using ClassifierConfig
+    >>> from slim_gsgp.classification import ClassifierConfig
+    >>> config = ClassifierConfig(threshold=0.6, sigmoid_scale=1.5)
+    >>> classifier = BinaryClassifier(model, config=config)
     """
+
+    __slots__ = ('model', 'threshold', 'use_sigmoid', 'sigmoid_scale')
 
     def __init__(
         self, 
         model: GPModelProtocol, 
         threshold: float = 0.5, 
         use_sigmoid: bool = True,
-        sigmoid_scale: float = 1.0
+        sigmoid_scale: float = 1.0,
+        *,
+        config: Optional['ClassifierConfig'] = None
     ) -> None:
         """
         Initialize a binary classifier wrapper.
@@ -111,6 +123,9 @@ class BinaryClassifier:
             If False, classification is done based on the sign of outputs.
         sigmoid_scale : float, default=1.0
             Scaling factor for sigmoid function.
+        config : ClassifierConfig, optional
+            Configuration object. If provided, overrides threshold, use_sigmoid,
+            and sigmoid_scale parameters.
             
         Raises
         ------
@@ -119,8 +134,14 @@ class BinaryClassifier:
         ValueError
             If sigmoid_scale is not positive.
         """
-        validate_threshold(threshold)
-        validate_scaling_factor(sigmoid_scale)
+        # Use config if provided, otherwise use individual parameters
+        if config is not None:
+            threshold = config.threshold
+            use_sigmoid = config.use_sigmoid
+            sigmoid_scale = config.sigmoid_scale
+        else:
+            validate_threshold(threshold)
+            validate_scaling_factor(sigmoid_scale)
         
         self.model = model
         self.threshold = threshold
@@ -163,8 +184,8 @@ class BinaryClassifier:
 
         # Apply transformation based on configuration
         if self.use_sigmoid:
-            # Direct sigmoid application - more efficient
-            probs = apply_sigmoid(raw_preds, self.sigmoid_scale)
+            # Skip validation - sigmoid_scale was validated at init
+            probs = apply_sigmoid(raw_preds, self.sigmoid_scale, _skip_validation=True)
         else:
             # For sign-based prediction, map output to [0,1] range
             probs = (raw_preds >= 0).float()
@@ -201,8 +222,8 @@ class BinaryClassifier:
         raw_preds = self.model.predict(X)
         
         if self.use_sigmoid:
-            # Apply sigmoid and threshold
-            probs = apply_sigmoid(raw_preds, self.sigmoid_scale)
+            # Skip validation - sigmoid_scale was validated at init
+            probs = apply_sigmoid(raw_preds, self.sigmoid_scale, _skip_validation=True)
             return (probs > self.threshold).float()
         else:
             # Sign-based prediction (negative -> 0, non-negative -> 1)

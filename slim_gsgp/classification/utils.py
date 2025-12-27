@@ -28,7 +28,7 @@ classification tasks across GP, GSGP, and SLIM models.
 
 import logging
 import torch
-from typing import Callable, Dict
+from typing import Callable
 
 from .exceptions import FitnessRegistrationError
 from .validators import validate_scaling_factor
@@ -36,7 +36,11 @@ from .validators import validate_scaling_factor
 logger = logging.getLogger(__name__)
 
 
-def apply_sigmoid(tensor: torch.Tensor, scaling_factor: float = 1.0) -> torch.Tensor:
+def apply_sigmoid(
+    tensor: torch.Tensor, 
+    scaling_factor: float = 1.0,
+    _skip_validation: bool = False
+) -> torch.Tensor:
     """
     Apply scaled sigmoid transformation to tensor.
     
@@ -50,6 +54,8 @@ def apply_sigmoid(tensor: torch.Tensor, scaling_factor: float = 1.0) -> torch.Te
     scaling_factor : float, default=1.0
         Controls the steepness of the sigmoid curve. Higher values make the transition
         between 0 and 1 more abrupt. Must be positive.
+    _skip_validation : bool, default=False
+        Internal parameter to skip validation for performance-critical paths.
 
     Returns
     -------
@@ -59,7 +65,7 @@ def apply_sigmoid(tensor: torch.Tensor, scaling_factor: float = 1.0) -> torch.Te
     Raises
     ------
     ValueError
-        If scaling_factor is not positive.
+        If scaling_factor is not positive (when validation is enabled).
         
     Examples
     --------
@@ -70,7 +76,8 @@ def apply_sigmoid(tensor: torch.Tensor, scaling_factor: float = 1.0) -> torch.Te
     >>> apply_sigmoid(x, scaling_factor=2.0)  # Steeper curve
     tensor([0.0180, 0.1192, 0.5000, 0.8808, 0.9820])
     """
-    validate_scaling_factor(scaling_factor)
+    if not _skip_validation:
+        validate_scaling_factor(scaling_factor)
     return torch.sigmoid(scaling_factor * tensor)
 
 

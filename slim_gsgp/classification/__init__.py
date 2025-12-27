@@ -49,12 +49,57 @@ Example:
 
 from .binary import BinaryClassifier, train_binary_classifier
 from .metrics import calculate_binary_metrics, save_metrics_to_csv
-from .utils import register_classification_fitness_functions
+from .utils import (
+    register_classification_fitness_functions,
+    apply_sigmoid,
+    modified_sigmoid,  # Deprecated, kept for backward compatibility
+    binary_threshold_transform,
+    binary_sign_transform,
+    create_binary_fitness_function
+)
+from .exceptions import (
+    ClassificationError,
+    InvalidLabelError,
+    AlgorithmNotFoundError,
+    InvalidThresholdError,
+    InvalidShapeError,
+    FitnessRegistrationError
+)
+
+# Attempt to register fitness functions at module import
+# This is a convenience - users can also call it explicitly
+import logging
+logger = logging.getLogger(__name__)
+
+try:
+    _registration_success = register_classification_fitness_functions()
+    logger.info("Binary classification fitness functions registered successfully")
+except Exception as e:
+    logger.warning(f"Could not auto-register fitness functions: {e}")
+    logger.warning("Call register_classification_fitness_functions() explicitly before training")
 
 __all__ = [
+    # Main classes and functions
     'BinaryClassifier',
     'train_binary_classifier',
     'register_classification_fitness_functions',
+    
+    # Metrics
     'calculate_binary_metrics',
-    'save_metrics_to_csv'
+    'save_metrics_to_csv',
+    
+    # Utilities
+    'apply_sigmoid',
+    'modified_sigmoid',
+    'binary_threshold_transform',
+    'binary_sign_transform',
+    'create_binary_fitness_function',
+    
+    # Exceptions
+    'ClassificationError',
+    'InvalidLabelError',
+    'AlgorithmNotFoundError',
+    'InvalidThresholdError',
+    'InvalidShapeError',
+    'FitnessRegistrationError',
 ]

@@ -25,20 +25,41 @@ Binary Classification module for SLIM-GSGP.
 This module provides tools for binary classification using GP, GSGP, or SLIM models.
 """
 
+import logging
 import torch
-from typing import Any, Dict, Union
+from typing import Dict, Optional, Protocol, Union
 
 from .metrics import calculate_binary_metrics
-from .utils import modified_sigmoid, binary_sign_transform, register_classification_fitness_functions
+from .utils import apply_sigmoid
+from .validators import (
+    validate_binary_labels,
+    validate_threshold,
+    validate_scaling_factor,
+    validate_tensor_shape,
+    validate_matching_shapes
+)
+from .exceptions import AlgorithmNotFoundError, InvalidLabelError
 
-# Register fitness functions once at module import
-_register_success = register_classification_fitness_functions()
 from ..main_gp import gp
 from ..main_gsgp import gsgp
 from ..main_slim import slim
 
-# Type alias for model instances
-GPModel = Any  # Any of GP, GSGP, or SLIM models
+logger = logging.getLogger(__name__)
+
+
+class GPModelProtocol(Protocol):
+    """Protocol defining the interface for GP-based models.
+    
+    This protocol ensures type safety when working with different model types.
+    """
+    
+    def predict(self, X: torch.Tensor) -> torch.Tensor:
+        """Predict outputs for input features."""
+        ...
+    
+    def print_tree_representation(self) -> None:
+        """Print a representation of the model tree."""
+        ...
 
 
 class BinaryClassifier:
@@ -47,29 +68,69 @@ class BinaryClassifier:
 
     This class wraps GP, GSGP, or SLIM models to provide a consistent interface
     for binary classification tasks.
+    
+    Attributes
+    ----------
+    model : GPModelProtocol
+        The underlying GP-based model.
+    threshold : float
+        Classification threshold (default: 0.5).
+    use_sigmoid : bool
+        Whether to apply sigmoid to outputs.
+    sigmoid_scale : float
+        Scaling factor for sigmoid function.
+        
+    Examples
+    --------
+    >>> from slim_gsgp.classification import train_binary_classifier
+    >>> classifier = train_binary_classifier(
+    ...     X_train, y_train, X_val, y_val, algorithm='gp'
+    ... )
+    >>> predictions = classifier.predict(X_test)
+    >>> metrics = classifier.evaluate(X_test, y_test)
     """
 
-    def __init__(self, model: GPModel, threshold: float = 0.5, use_sigmoid: bool = True,
-                 sigmoid_scale: float = 1.0):
+    def __init__(
+        self, 
+        model: GPModelProtocol, 
+        threshold: float = 0.5, 
+        use_sigmoid: bool = True,
+        sigmoid_scale: float = 1.0
+    ) -> None:
         """
         Initialize a binary classifier wrapper.
 
         Parameters
         ----------
-        model : GPModel
+        model : GPModelProtocol
             The trained GP, GSGP, or SLIM model.
-        threshold : float
-            Threshold for binary classification (default: 0.5).
-        use_sigmoid : bool
-            Whether to apply sigmoid to model outputs (default: True).
+        threshold : float, default=0.5
+            Threshold for binary classification.
+        use_sigmoid : bool, default=True
+            Whether to apply sigmoid to model outputs.
             If False, classification is done based on the sign of outputs.
-        sigmoid_scale : float
-            Scaling factor for sigmoid function (default: 1.0).
+        sigmoid_scale : float, default=1.0
+            Scaling factor for sigmoid function.
+            
+        Raises
+        ------
+        InvalidThresholdError
+            If threshold is not in (0, 1).
+        ValueError
+            If sigmoid_scale is not positive.
         """
+        validate_threshold(threshold)
+        validate_scaling_factor(sigmoid_scale)
+        
         self.model = model
         self.threshold = threshold
         self.use_sigmoid = use_sigmoid
         self.sigmoid_scale = sigmoid_scale
+        
+        logger.debug(
+            f"BinaryClassifier initialized: threshold={threshold}, "
+            f"use_sigmoid={use_sigmoid}, scale={sigmoid_scale}"
+        )
 
     def predict_proba(self, X: torch.Tensor) -> torch.Tensor:
         """
@@ -78,25 +139,37 @@ class BinaryClassifier:
         Parameters
         ----------
         X : torch.Tensor
-            Input features.
+            Input features of shape (n_samples, n_features).
 
         Returns
         -------
         torch.Tensor
-            Predicted class probabilities (shape: [n_samples, 2]).
+            Predicted class probabilities of shape (n_samples, 2).
+            First column is probability of class 0, second is class 1.
+            
+        Examples
+        --------
+        >>> X_test = torch.randn(10, 5)
+        >>> probs = classifier.predict_proba(X_test)
+        >>> probs.shape
+        torch.Size([10, 2])
+        >>> torch.all((probs >= 0) & (probs <= 1))
+        True
         """
+        validate_tensor_shape(X, name="X")
+        
         # Get raw predictions
         raw_preds = self.model.predict(X)
 
-        # Apply sigmoid if needed
+        # Apply transformation based on configuration
         if self.use_sigmoid:
-            # Use torch.sigmoid directly - more efficient than closure
-            probs = torch.sigmoid(self.sigmoid_scale * raw_preds)
+            # Direct sigmoid application - more efficient
+            probs = apply_sigmoid(raw_preds, self.sigmoid_scale)
         else:
             # For sign-based prediction, map output to [0,1] range
             probs = (raw_preds >= 0).float()
 
-        # Return probabilities for both classes
+        # Return probabilities for both classes [P(class=0), P(class=1)]
         return torch.stack([1 - probs, probs], dim=1)
 
     def predict(self, X: torch.Tensor) -> torch.Tensor:
@@ -106,82 +179,134 @@ class BinaryClassifier:
         Parameters
         ----------
         X : torch.Tensor
-            Input features.
+            Input features of shape (n_samples, n_features).
 
         Returns
         -------
         torch.Tensor
-            Predicted class labels (0 or 1).
+            Predicted class labels (0 or 1) of shape (n_samples,).
+            
+        Examples
+        --------
+        >>> X_test = torch.randn(10, 5)
+        >>> predictions = classifier.predict(X_test)
+        >>> predictions.shape
+        torch.Size([10])
+        >>> torch.all((predictions == 0) | (predictions == 1))
+        True
         """
+        validate_tensor_shape(X, name="X")
+        
         # Get raw predictions
         raw_preds = self.model.predict(X)
         
         if self.use_sigmoid:
-            # Use torch.sigmoid directly with scaling - more efficient than closure
-            probs = torch.sigmoid(self.sigmoid_scale * raw_preds)
+            # Apply sigmoid and threshold
+            probs = apply_sigmoid(raw_preds, self.sigmoid_scale)
             return (probs > self.threshold).float()
         else:
             # Sign-based prediction (negative -> 0, non-negative -> 1)
             return (raw_preds >= 0).float()
 
-    def evaluate(self, X: torch.Tensor, y: torch.Tensor) -> Dict[str, float]:
+    def evaluate(
+        self, 
+        X: torch.Tensor, 
+        y: torch.Tensor
+    ) -> Dict[str, Union[float, int]]:
         """
         Evaluate the classifier on test data.
 
         Parameters
         ----------
         X : torch.Tensor
-            Input features.
+            Input features of shape (n_samples, n_features).
         y : torch.Tensor
-            True labels.
+            True labels (0 or 1) of shape (n_samples,).
 
         Returns
         -------
-        Dict[str, float]
-            Dictionary containing evaluation metrics.
+        Dict[str, Union[float, int]]
+            Dictionary containing evaluation metrics including:
+            - accuracy, precision, recall, f1, specificity
+            - true_positives, true_negatives, false_positives, false_negatives
+            
+        Raises
+        ------
+        InvalidShapeError
+            If X and y have mismatched dimensions.
+        InvalidLabelError
+            If y contains non-binary values.
+            
+        Examples
+        --------
+        >>> metrics = classifier.evaluate(X_test, y_test)
+        >>> print(f\"Accuracy: {metrics['accuracy']:.4f}\")
+        Accuracy: 0.9234
+        >>> print(f\"F1 Score: {metrics['f1']:.4f}\")
+        F1 Score: 0.9156
         """
+        validate_tensor_shape(X, name="X")
+        validate_tensor_shape(y, name="y")
+        validate_matching_shapes(X, y, "X", "y")
+        validate_binary_labels(y, name="y")
+        
         # Make predictions
         y_pred = self.predict(X)
 
-        # Calculate metrics
+        # Calculate and return metrics
         return calculate_binary_metrics(y, y_pred)
 
-    def print_tree_representation(self):
+    def print_tree_representation(self) -> None:
         """
         Print the tree representation of the underlying model.
+        
+        This method delegates to the model's tree representation method if available.
         """
         if hasattr(self.model, 'print_tree_representation'):
             self.model.print_tree_representation()
         else:
-            print("Tree representation not available for this model type")
+            logger.warning(
+                f"Tree representation not available for model type {type(self.model).__name__}"
+            )
+            print(f"Tree representation not available for {type(self.model).__name__}")
 
 
-def train_binary_classifier(X_train, y_train, X_val=None, y_val=None, algorithm='gp',
-                            use_sigmoid=True, sigmoid_scale=1.0, threshold=0.5,
-                            fitness_function='binary_rmse', **kwargs):
+def train_binary_classifier(
+    X_train: torch.Tensor,
+    y_train: torch.Tensor,
+    X_val: Optional[torch.Tensor] = None,
+    y_val: Optional[torch.Tensor] = None,
+    algorithm: str = 'gp',
+    use_sigmoid: bool = True,
+    sigmoid_scale: float = 1.0,
+    threshold: float = 0.5,
+    fitness_function: str = 'binary_rmse',
+    **kwargs
+) -> BinaryClassifier:
     """
     Train a binary classifier using GP-based methods.
 
     Parameters
     ----------
     X_train : torch.Tensor
-        Training features.
+        Training features of shape (n_samples, n_features).
     y_train : torch.Tensor
-        Training labels (0 or 1).
+        Training labels (0 or 1) of shape (n_samples,).
     X_val : torch.Tensor, optional
-        Validation features.
+        Validation features of shape (n_samples, n_features).
     y_val : torch.Tensor, optional
-        Validation labels.
-    algorithm : str
-        Algorithm to use: 'gp', 'gsgp', or 'slim' (default: 'gp').
-    use_sigmoid : bool
-        Whether to use sigmoid activation (default: True).
-    sigmoid_scale : float
-        Scaling factor for sigmoid (default: 1.0).
-    threshold : float
-        Threshold for binary classification (default: 0.5).
-    fitness_function : str
-        Fitness function to use (default: 'binary_rmse').
+        Validation labels (0 or 1) of shape (n_samples,).
+    algorithm : str, default='gp'
+        Algorithm to use: 'gp', 'gsgp', or 'slim'.
+    use_sigmoid : bool, default=True
+        Whether to use sigmoid activation.
+    sigmoid_scale : float, default=1.0
+        Scaling factor for sigmoid.
+    threshold : float, default=0.5
+        Threshold for binary classification.
+    fitness_function : str, default='binary_rmse'
+        Fitness function to use. Should be one of the registered
+        binary classification fitness functions.
     **kwargs
         Additional arguments passed to the underlying algorithm.
 
@@ -189,39 +314,116 @@ def train_binary_classifier(X_train, y_train, X_val=None, y_val=None, algorithm=
     -------
     BinaryClassifier
         Trained binary classifier.
+        
+    Raises
+    ------
+    InvalidLabelError
+        If labels are not binary (0 or 1).
+    AlgorithmNotFoundError
+        If the specified algorithm is not supported.
+    InvalidShapeError
+        If input shapes are incompatible.
+    InvalidThresholdError
+        If threshold is not in (0, 1).
+        
+    Examples
+    --------
+    >>> import torch
+    >>> from slim_gsgp.classification import train_binary_classifier
+    >>> X_train = torch.randn(100, 10)
+    >>> y_train = torch.randint(0, 2, (100,)).float()
+    >>> classifier = train_binary_classifier(
+    ...     X_train, y_train, 
+    ...     algorithm='gp',
+    ...     pop_size=50,
+    ...     n_iter=10
+    ... )
+    >>> predictions = classifier.predict(X_train)
+    
+    >>> # With validation set
+    >>> X_val = torch.randn(30, 10)
+    >>> y_val = torch.randint(0, 2, (30,)).float()
+    >>> classifier = train_binary_classifier(
+    ...     X_train, y_train, X_val, y_val,
+    ...     algorithm='slim',
+    ...     slim_version='SLIM+ABS'
+    ... )
+    >>> metrics = classifier.evaluate(X_val, y_val)
+    >>> print(f\"Validation Accuracy: {metrics['accuracy']:.4f}\")
     """
-    # Fitness functions are registered at module import
-    # register_classification_fitness_functions()
-
-    # Ensure binary labels
-    if len(torch.unique(y_train)) > 2:
-        raise ValueError("Training labels must be binary (0 or 1).")
+    # Input validation
+    validate_tensor_shape(X_train, name="X_train")
+    validate_tensor_shape(y_train, name="y_train")
+    validate_matching_shapes(X_train, y_train, "X_train", "y_train")
+    validate_binary_labels(y_train, name="y_train")
+    validate_threshold(threshold)
+    validate_scaling_factor(sigmoid_scale)
+    
+    if X_val is not None:
+        validate_tensor_shape(X_val, expected_features=X_train.shape[1], name="X_val")
+    
+    if y_val is not None:
+        validate_tensor_shape(y_val, name="y_val")
+        if X_val is not None:
+            validate_matching_shapes(X_val, y_val, "X_val", "y_val")
+        validate_binary_labels(y_val, name="y_val")
+    
+    logger.info(
+        f"Training binary classifier with algorithm={algorithm}, "
+        f"fitness={fitness_function}, X_train shape={tuple(X_train.shape)}"
+    )
 
     # Convert targets to float
     y_train = y_train.float()
     if y_val is not None:
         y_val = y_val.float()
 
-    # Select the algorithm
-    if algorithm.lower() == 'gp':
-        model = gp(X_train=X_train, y_train=y_train, X_test=X_val, y_test=y_val,
-                   fitness_function=fitness_function, **kwargs)
-    elif algorithm.lower() == 'gsgp':
+    # Select and train the algorithm
+    algorithm_lower = algorithm.lower()
+    
+    if algorithm_lower == 'gp':
+        model = gp(
+            X_train=X_train, 
+            y_train=y_train, 
+            X_test=X_val, 
+            y_test=y_val,
+            fitness_function=fitness_function, 
+            **kwargs
+        )
+    elif algorithm_lower == 'gsgp':
         # Ensure reconstruct=True for GSGP to enable predict method
         if 'reconstruct' not in kwargs:
             kwargs['reconstruct'] = True
 
-        # GSGP supports max_depth, don't remove it
-        # kwargs = {k: v for k, v in kwargs.items() if k != 'max_depth'}
-
-        model = gsgp(X_train=X_train, y_train=y_train, X_test=X_val, y_test=y_val,
-                     fitness_function=fitness_function, **kwargs)
-    elif algorithm.lower() == 'slim':
-        model = slim(X_train=X_train, y_train=y_train, X_test=X_val, y_test=y_val,
-                     fitness_function=fitness_function, **kwargs)
+        model = gsgp(
+            X_train=X_train, 
+            y_train=y_train, 
+            X_test=X_val, 
+            y_test=y_val,
+            fitness_function=fitness_function, 
+            **kwargs
+        )
+    elif algorithm_lower == 'slim':
+        model = slim(
+            X_train=X_train, 
+            y_train=y_train, 
+            X_test=X_val, 
+            y_test=y_val,
+            fitness_function=fitness_function, 
+            **kwargs
+        )
     else:
-        raise ValueError(f"Unknown algorithm: {algorithm}. Use 'gp', 'gsgp', or 'slim'.")
+        raise AlgorithmNotFoundError(
+            f"Unknown algorithm: '{algorithm}'. "
+            f"Supported algorithms are: 'gp', 'gsgp', 'slim'"
+        )
+    
+    logger.info(f"Successfully trained {algorithm} model")
 
     # Return wrapped model
-    return BinaryClassifier(model, threshold=threshold, use_sigmoid=use_sigmoid,
-                            sigmoid_scale=sigmoid_scale)
+    return BinaryClassifier(
+        model, 
+        threshold=threshold, 
+        use_sigmoid=use_sigmoid,
+        sigmoid_scale=sigmoid_scale
+    )

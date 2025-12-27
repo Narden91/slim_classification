@@ -31,12 +31,13 @@ from sklearn.model_selection import train_test_split as sklearn_train_test_split
 from sklearn.preprocessing import StandardScaler
 
 # Import binary classification utilities
-from slim_gsgp.utils.binary_classification import (
+from slim_gsgp.classification import (
+    apply_sigmoid,
     modified_sigmoid,
     binary_threshold_transform,
     binary_sign_transform,
     create_binary_fitness_function,
-    register_binary_fitness_functions,
+    register_classification_fitness_functions,
     train_binary_classifier,
     BinaryClassifier
 )
@@ -84,11 +85,34 @@ class TestBinaryClassification(unittest.TestCase):
         cls.y_test = y_test
 
         # Register fitness functions
-        register_binary_fitness_functions()
+        register_classification_fitness_functions()
 
+    def test_apply_sigmoid(self):
+        """Test apply_sigmoid function."""
+        # Test with various inputs
+        test_tensor = torch.tensor([-2.0, -1.0, 0.0, 1.0, 2.0])
+        result = apply_sigmoid(test_tensor, scaling_factor=1.0)
+
+        # Check output range
+        self.assertTrue(torch.all(result >= 0) and torch.all(result <= 1))
+
+        # Check specific values
+        self.assertAlmostEqual(result[2].item(), 0.5, places=6)  # sigmoid(0) = 0.5
+        self.assertTrue(result[3].item() > 0.7)  # sigmoid(1) should be > 0.7
+        self.assertTrue(result[1].item() < 0.3)  # sigmoid(-1) should be < 0.3
+    
     def test_modified_sigmoid(self):
-        """Test modified sigmoid function."""
-        sigmoid = modified_sigmoid(scaling_factor=1.0)
+        """Test modified_sigmoid function (deprecated but kept for compatibility)."""
+        import warnings
+        
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            sigmoid = modified_sigmoid(scaling_factor=1.0)
+            
+            # Check that deprecation warning was raised
+            self.assertEqual(len(w), 1)
+            self.assertTrue(issubclass(w[-1].category, DeprecationWarning))
+            self.assertIn("deprecated", str(w[-1].message).lower())
 
         # Test with various inputs
         test_tensor = torch.tensor([-2.0, -1.0, 0.0, 1.0, 2.0])

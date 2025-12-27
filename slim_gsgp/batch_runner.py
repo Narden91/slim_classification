@@ -183,13 +183,13 @@ def execute_runs(
     for run, ns in planned:
         stored = registry.register(run)
         if stored.status == "completed" and resume:
-            print(f"[SKIP] {run.run_id} already completed")
+            print(f"[SKIP] {stored.run_id} already completed")
             continue
         if stored.status == "running":
             if reset_running:
                 stored = registry.reset(run.run_id)
             else:
-                print(f"[SKIP] {run.run_id} still marked as running (use --reset-running to retry)")
+                print(f"[SKIP] {stored.run_id} still marked as running (use --reset-running to retry)")
                 continue
 
         print(

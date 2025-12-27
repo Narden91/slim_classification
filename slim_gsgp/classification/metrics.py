@@ -27,10 +27,11 @@ This module provides functions for evaluating classification performance.
 import csv
 import datetime
 import os
+import logging
 
 import torch
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -40,21 +41,45 @@ from sklearn.metrics import (
 )
 from slim_gsgp.utils.utils import create_result_directory
 
+logger = logging.getLogger(__name__)
 
-def calculate_binary_metrics(y_true: torch.Tensor, y_pred: torch.Tensor) -> Dict[str, float]:
+
+def _to_numpy(tensor: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
+    """
+    Convert tensor to numpy array efficiently.
+    
+    Parameters
+    ----------
+    tensor : Union[torch.Tensor, np.ndarray]
+        Input tensor or array.
+        
+    Returns
+    -------
+    np.ndarray
+        Numpy array.
+    """
+    if isinstance(tensor, torch.Tensor):
+        return tensor.detach().cpu().numpy()
+    return np.asarray(tensor)
+
+
+def calculate_binary_metrics(
+    y_true: Union[torch.Tensor, np.ndarray], 
+    y_pred: Union[torch.Tensor, np.ndarray]
+) -> Dict[str, Union[float, int, np.ndarray]]:
     """
     Calculate standard metrics for binary classification.
 
     Parameters
     ----------
-    y_true : torch.Tensor
+    y_true : Union[torch.Tensor, np.ndarray]
         True labels (0 or 1).
-    y_pred : torch.Tensor
+    y_pred : Union[torch.Tensor, np.ndarray]
         Predicted labels (0 or 1).
 
     Returns
     -------
-    Dict[str, float]
+    Dict[str, Union[float, int, np.ndarray]]
         Dictionary containing various classification metrics:
         - accuracy: Overall prediction accuracy
         - precision: Precision score (TP / (TP + FP))
@@ -63,10 +88,20 @@ def calculate_binary_metrics(y_true: torch.Tensor, y_pred: torch.Tensor) -> Dict
         - specificity: True negative rate (TN / (TN + FP))
         - confusion_matrix: Full confusion matrix
         - true_positives, true_negatives, false_positives, false_negatives: Counts
+        
+    Examples
+    --------
+    >>> y_true = torch.tensor([0., 1., 1., 0., 1.])
+    >>> y_pred = torch.tensor([0., 1., 0., 0., 1.])
+    >>> metrics = calculate_binary_metrics(y_true, y_pred)
+    >>> metrics['accuracy']
+    0.8
+    >>> metrics['true_positives']
+    2
     """
-    # Convert to numpy for sklearn metrics
-    y_true_np = y_true.detach().cpu().numpy() if isinstance(y_true, torch.Tensor) else y_true
-    y_pred_np = y_pred.detach().cpu().numpy() if isinstance(y_pred, torch.Tensor) else y_pred
+    # Convert to numpy efficiently (single conversion per input)
+    y_true_np = _to_numpy(y_true)
+    y_pred_np = _to_numpy(y_pred)
 
     # Calculate basic metrics
     metrics = {
@@ -93,19 +128,19 @@ def calculate_binary_metrics(y_true: torch.Tensor, y_pred: torch.Tensor) -> Dict
 
 
 def save_metrics_to_csv(
-        metrics: Dict[str, float],
+        metrics: Dict[str, Union[float, int]],
         training_time: float,
         dataset_name: str,
         algorithm: str,
         root_dir: Optional[str] = None,
-        additional_info: Optional[Dict] = None
+        additional_info: Optional[Dict[str, Union[str, int, float]]] = None
 ) -> str:
     """
     Save classification metrics and experiment duration to a CSV file.
 
     Parameters
     ----------
-    metrics : Dict[str, float]
+    metrics : Dict[str, Union[float, int]]
         Dictionary of classification metrics from calculate_binary_metrics
     training_time : float
         Training time in seconds
@@ -115,13 +150,19 @@ def save_metrics_to_csv(
         Algorithm used (gp, gsgp, slim)
     root_dir : str, optional
         Root directory for saving the file
-    additional_info : Dict, optional
+    additional_info : Dict[str, Union[str, int, float]], optional
         Additional information to include in the CSV
 
     Returns
     -------
     str
         Path to the saved CSV file
+        
+    Examples
+    --------
+    >>> metrics = {'accuracy': 0.95, 'precision': 0.93, 'recall': 0.97}
+    >>> path = save_metrics_to_csv(metrics, 120.5, 'breast_cancer', 'gp')
+    >>> assert os.path.exists(path)
     """
     # Get project root directory if not provided
     if root_dir is None:

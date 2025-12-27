@@ -39,13 +39,17 @@ from .validators import (
     validate_matching_shapes,
 )
 from .exceptions import AlgorithmNotFoundError
+from .strategies import (
+    PredictionStrategy,
+    SigmoidStrategy,
+    SignBasedStrategy,
+    PredictionContext,
+    get_strategy,
+)
+from .factories import AlgorithmFactory, get_default_factory
 
 if TYPE_CHECKING:
     from .config import ClassifierConfig
-
-from ..main_gp import gp
-from ..main_gsgp import gsgp
-from ..main_slim import slim
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +74,8 @@ class BinaryClassifier:
     Wrapper class for binary classification using GP-based models.
 
     This class wraps GP, GSGP, or SLIM models to provide a consistent interface
-    for binary classification tasks.
+    for binary classification tasks. Supports both traditional configuration
+    and Strategy Pattern for prediction behavior.
     
     Attributes
     ----------
@@ -82,6 +87,8 @@ class BinaryClassifier:
         Whether to apply sigmoid to outputs.
     sigmoid_scale : float
         Scaling factor for sigmoid function.
+    _strategy : PredictionStrategy
+        Internal strategy used for predictions (auto-created from config).
         
     Examples
     --------
@@ -96,9 +103,14 @@ class BinaryClassifier:
     >>> from slim_gsgp.classification import ClassifierConfig
     >>> config = ClassifierConfig(threshold=0.6, sigmoid_scale=1.5)
     >>> classifier = BinaryClassifier(model, config=config)
+    
+    >>> # Using Strategy Pattern directly
+    >>> from slim_gsgp.classification.strategies import SigmoidStrategy
+    >>> strategy = SigmoidStrategy(scale=2.0, threshold=0.6)
+    >>> classifier = BinaryClassifier(model, strategy=strategy)
     """
 
-    __slots__ = ('model', 'threshold', 'use_sigmoid', 'sigmoid_scale')
+    __slots__ = ('model', 'threshold', 'use_sigmoid', 'sigmoid_scale', '_strategy')
 
     def __init__(
         self, 
@@ -107,7 +119,8 @@ class BinaryClassifier:
         use_sigmoid: bool = True,
         sigmoid_scale: float = 1.0,
         *,
-        config: Optional['ClassifierConfig'] = None
+        config: Optional['ClassifierConfig'] = None,
+        strategy: Optional[PredictionStrategy] = None
     ) -> None:
         """
         Initialize a binary classifier wrapper.
@@ -126,6 +139,9 @@ class BinaryClassifier:
         config : ClassifierConfig, optional
             Configuration object. If provided, overrides threshold, use_sigmoid,
             and sigmoid_scale parameters.
+        strategy : PredictionStrategy, optional
+            Prediction strategy to use. If provided, overrides all other
+            prediction-related parameters (threshold, use_sigmoid, sigmoid_scale).
             
         Raises
         ------
@@ -134,24 +150,77 @@ class BinaryClassifier:
         ValueError
             If sigmoid_scale is not positive.
         """
-        # Use config if provided, otherwise use individual parameters
-        if config is not None:
+        self.model = model
+        
+        # Priority: strategy > config > individual parameters
+        if strategy is not None:
+            # Use the provided strategy directly
+            self._strategy = strategy
+            # Extract parameters for backward compatibility attributes
+            if isinstance(strategy, SigmoidStrategy):
+                self.threshold = strategy.threshold
+                self.use_sigmoid = True
+                self.sigmoid_scale = strategy.scale
+            elif isinstance(strategy, SignBasedStrategy):
+                self.threshold = 0.5  # Not used for sign-based
+                self.use_sigmoid = False
+                self.sigmoid_scale = 1.0
+            else:
+                # Custom strategy - use defaults for attributes
+                self.threshold = 0.5
+                self.use_sigmoid = True
+                self.sigmoid_scale = 1.0
+        elif config is not None:
             threshold = config.threshold
             use_sigmoid = config.use_sigmoid
             sigmoid_scale = config.sigmoid_scale
+            self.threshold = threshold
+            self.use_sigmoid = use_sigmoid
+            self.sigmoid_scale = sigmoid_scale
+            self._strategy = self._create_strategy()
         else:
             validate_threshold(threshold)
             validate_scaling_factor(sigmoid_scale)
-        
-        self.model = model
-        self.threshold = threshold
-        self.use_sigmoid = use_sigmoid
-        self.sigmoid_scale = sigmoid_scale
+            self.threshold = threshold
+            self.use_sigmoid = use_sigmoid
+            self.sigmoid_scale = sigmoid_scale
+            self._strategy = self._create_strategy()
         
         logger.debug(
-            f"BinaryClassifier initialized: threshold={threshold}, "
-            f"use_sigmoid={use_sigmoid}, scale={sigmoid_scale}"
+            f"BinaryClassifier initialized: threshold={self.threshold}, "
+            f"use_sigmoid={self.use_sigmoid}, scale={self.sigmoid_scale}, "
+            f"strategy={self._strategy.name}"
         )
+    
+    def _create_strategy(self) -> PredictionStrategy:
+        """Create a prediction strategy from current configuration."""
+        if self.use_sigmoid:
+            return SigmoidStrategy(scale=self.sigmoid_scale, threshold=self.threshold)
+        else:
+            return SignBasedStrategy()
+    
+    @property
+    def strategy(self) -> PredictionStrategy:
+        """Get the current prediction strategy."""
+        return self._strategy
+    
+    @strategy.setter
+    def strategy(self, new_strategy: PredictionStrategy) -> None:
+        """
+        Set a new prediction strategy.
+        
+        Parameters
+        ----------
+        new_strategy : PredictionStrategy
+            The new strategy to use.
+            
+        Examples
+        --------
+        >>> from slim_gsgp.classification.strategies import SignBasedStrategy
+        >>> classifier.strategy = SignBasedStrategy()
+        """
+        self._strategy = new_strategy
+        logger.debug(f"Strategy changed to: {new_strategy.name}")
 
     def predict_proba(self, X: torch.Tensor) -> torch.Tensor:
         """
@@ -179,19 +248,9 @@ class BinaryClassifier:
         """
         validate_tensor_shape(X, name="X")
         
-        # Get raw predictions
+        # Get raw predictions and delegate to strategy
         raw_preds = self.model.predict(X)
-
-        # Apply transformation based on configuration
-        if self.use_sigmoid:
-            # Skip validation - sigmoid_scale was validated at init
-            probs = apply_sigmoid(raw_preds, self.sigmoid_scale, _skip_validation=True)
-        else:
-            # For sign-based prediction, map output to [0,1] range
-            probs = (raw_preds >= 0).float()
-
-        # Return probabilities for both classes [P(class=0), P(class=1)]
-        return torch.stack([1 - probs, probs], dim=1)
+        return self._strategy.predict_proba(raw_preds)
 
     def predict(self, X: torch.Tensor) -> torch.Tensor:
         """
@@ -218,16 +277,9 @@ class BinaryClassifier:
         """
         validate_tensor_shape(X, name="X")
         
-        # Get raw predictions
+        # Get raw predictions and delegate to strategy
         raw_preds = self.model.predict(X)
-        
-        if self.use_sigmoid:
-            # Skip validation - sigmoid_scale was validated at init
-            probs = apply_sigmoid(raw_preds, self.sigmoid_scale, _skip_validation=True)
-            return (probs > self.threshold).float()
-        else:
-            # Sign-based prediction (negative -> 0, non-negative -> 1)
-            return (raw_preds >= 0).float()
+        return self._strategy.predict(raw_preds)
 
     def evaluate(
         self, 
@@ -399,45 +451,17 @@ def train_binary_classifier(
     if y_val is not None:
         y_val = y_val.float()
 
-    # Select and train the algorithm
-    algorithm_lower = algorithm.lower()
-    
-    if algorithm_lower == 'gp':
-        model = gp(
-            X_train=X_train, 
-            y_train=y_train, 
-            X_test=X_val, 
-            y_test=y_val,
-            fitness_function=fitness_function, 
-            **kwargs
-        )
-    elif algorithm_lower == 'gsgp':
-        # Ensure reconstruct=True for GSGP to enable predict method
-        if 'reconstruct' not in kwargs:
-            kwargs['reconstruct'] = True
-
-        model = gsgp(
-            X_train=X_train, 
-            y_train=y_train, 
-            X_test=X_val, 
-            y_test=y_val,
-            fitness_function=fitness_function, 
-            **kwargs
-        )
-    elif algorithm_lower == 'slim':
-        model = slim(
-            X_train=X_train, 
-            y_train=y_train, 
-            X_test=X_val, 
-            y_test=y_val,
-            fitness_function=fitness_function, 
-            **kwargs
-        )
-    else:
-        raise AlgorithmNotFoundError(
-            f"Unknown algorithm: '{algorithm}'. "
-            f"Supported algorithms are: 'gp', 'gsgp', 'slim'"
-        )
+    # Use factory to create the model
+    factory = get_default_factory()
+    model = factory.create(
+        algorithm=algorithm,
+        X_train=X_train,
+        y_train=y_train,
+        X_test=X_val,
+        y_test=y_val,
+        fitness_function=fitness_function,
+        **kwargs
+    )
     
     logger.info(f"Successfully trained {algorithm} model")
 

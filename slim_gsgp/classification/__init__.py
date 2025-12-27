@@ -65,6 +65,21 @@ from .exceptions import (
     InvalidShapeError,
     FitnessRegistrationError,
 )
+from .factories import (
+    AlgorithmFactory,
+    get_default_factory,
+    create_algorithm,
+    register_algorithm,
+)
+from .strategies import (
+    PredictionStrategy,
+    SigmoidStrategy,
+    SignBasedStrategy,
+    SoftmaxStrategy,
+    PredictionContext,
+    get_strategy,
+    register_strategy,
+)
 
 # Backward compatibility exports (deprecated)
 from .utils import (
@@ -99,6 +114,21 @@ __all__ = [
     'apply_sigmoid',
     'register_classification_fitness_functions',
     'create_binary_fitness_function',
+    
+    # Factory Pattern
+    'AlgorithmFactory',
+    'get_default_factory',
+    'create_algorithm',
+    'register_algorithm',
+    
+    # Strategy Pattern
+    'PredictionStrategy',
+    'SigmoidStrategy',
+    'SignBasedStrategy',
+    'SoftmaxStrategy',
+    'PredictionContext',
+    'get_strategy',
+    'register_strategy',
     
     # Exceptions
     'ClassificationError',

@@ -39,7 +39,7 @@ from .exceptions import (
 def validate_binary_labels(
     labels: torch.Tensor,
     name: str = "labels"
-) -> None:
+) -> torch.Tensor:
     """
     Validate that labels are binary (only 0 and 1).
     
@@ -49,6 +49,11 @@ def validate_binary_labels(
         Labels to validate.
     name : str
         Name of the labels for error messages.
+        
+    Returns
+    -------
+    torch.Tensor
+        The validated labels (same as input).
         
     Raises
     ------
@@ -60,7 +65,9 @@ def validate_binary_labels(
     Examples
     --------
     >>> labels = torch.tensor([0., 1., 1., 0.])
-    >>> validate_binary_labels(labels)  # No error
+    >>> validated = validate_binary_labels(labels)
+    >>> torch.equal(labels, validated)
+    True
     
     >>> labels = torch.tensor([0., 1., 2.])
     >>> validate_binary_labels(labels)  # Raises InvalidLabelError
@@ -82,9 +89,11 @@ def validate_binary_labels(
             f"{name} must contain only 0 or 1, but found invalid values: "
             f"{invalid_values.tolist()}"
         )
+    
+    return labels
 
 
-def validate_threshold(threshold: float) -> None:
+def validate_threshold(threshold: float) -> float:
     """
     Validate classification threshold.
     
@@ -93,6 +102,11 @@ def validate_threshold(threshold: float) -> None:
     threshold : float
         Threshold value to validate.
         
+    Returns
+    -------
+    float
+        The validated threshold (same as input).
+        
     Raises
     ------
     InvalidThresholdError
@@ -100,7 +114,9 @@ def validate_threshold(threshold: float) -> None:
         
     Examples
     --------
-    >>> validate_threshold(0.5)  # No error
+    >>> validated = validate_threshold(0.5)
+    >>> validated
+    0.5
     >>> validate_threshold(1.5)  # Raises InvalidThresholdError
     """
     if not isinstance(threshold, (int, float)):
@@ -112,13 +128,15 @@ def validate_threshold(threshold: float) -> None:
         raise InvalidThresholdError(
             f"Threshold must be in range (0, 1), got {threshold}"
         )
+    
+    return threshold
 
 
 def validate_tensor_shape(
     tensor: torch.Tensor,
     expected_features: Optional[int] = None,
     name: str = "tensor"
-) -> None:
+) -> torch.Tensor:
     """
     Validate tensor shape and dimensions.
     
@@ -131,6 +149,11 @@ def validate_tensor_shape(
     name : str
         Name of tensor for error messages.
         
+    Returns
+    -------
+    torch.Tensor
+        The validated tensor (same as input).
+        
     Raises
     ------
     InvalidShapeError
@@ -139,7 +162,9 @@ def validate_tensor_shape(
     Examples
     --------
     >>> X = torch.randn(100, 10)
-    >>> validate_tensor_shape(X, expected_features=10)  # No error
+    >>> validated = validate_tensor_shape(X, expected_features=10)
+    >>> torch.equal(X, validated)
+    True
     
     >>> validate_tensor_shape(X, expected_features=5)  # Raises InvalidShapeError
     """
@@ -166,6 +191,8 @@ def validate_tensor_shape(
             raise InvalidShapeError(
                 f"{name} has {actual_features} features, expected {expected_features}"
             )
+    
+    return tensor
 
 
 def validate_matching_shapes(
@@ -173,7 +200,7 @@ def validate_matching_shapes(
     y: torch.Tensor,
     X_name: str = "X",
     y_name: str = "y"
-) -> None:
+) -> tuple:
     """
     Validate that X and y have matching sample dimensions.
     
@@ -188,6 +215,11 @@ def validate_matching_shapes(
     y_name : str
         Name of y for error messages.
         
+    Returns
+    -------
+    tuple
+        The validated (X, y) tensors (same as inputs).
+        
     Raises
     ------
     InvalidShapeError
@@ -197,7 +229,9 @@ def validate_matching_shapes(
     --------
     >>> X = torch.randn(100, 10)
     >>> y = torch.randn(100)
-    >>> validate_matching_shapes(X, y)  # No error
+    >>> X_val, y_val = validate_matching_shapes(X, y)
+    >>> torch.equal(X, X_val) and torch.equal(y, y_val)
+    True
     
     >>> y = torch.randn(50)
     >>> validate_matching_shapes(X, y)  # Raises InvalidShapeError
@@ -210,9 +244,11 @@ def validate_matching_shapes(
             f"{X_name} and {y_name} must have same number of samples. "
             f"Got {X_name}: {X_samples}, {y_name}: {y_samples}"
         )
+    
+    return X, y
 
 
-def validate_scaling_factor(scale: float, name: str = "scaling_factor") -> None:
+def validate_scaling_factor(scale: float, name: str = "scaling_factor") -> float:
     """
     Validate sigmoid scaling factor.
     
@@ -223,6 +259,11 @@ def validate_scaling_factor(scale: float, name: str = "scaling_factor") -> None:
     name : str
         Name for error messages.
         
+    Returns
+    -------
+    float
+        The validated scaling factor (same as input).
+        
     Raises
     ------
     ValueError
@@ -230,7 +271,9 @@ def validate_scaling_factor(scale: float, name: str = "scaling_factor") -> None:
         
     Examples
     --------
-    >>> validate_scaling_factor(1.0)  # No error
+    >>> validated = validate_scaling_factor(1.0)
+    >>> validated
+    1.0
     >>> validate_scaling_factor(-1.0)  # Raises ValueError
     """
     if not isinstance(scale, (int, float)):
@@ -242,3 +285,5 @@ def validate_scaling_factor(scale: float, name: str = "scaling_factor") -> None:
         raise ValueError(
             f"{name} must be positive, got {scale}"
         )
+    
+    return scale

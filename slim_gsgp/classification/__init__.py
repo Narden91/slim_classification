@@ -52,6 +52,7 @@ import logging
 from .binary import BinaryClassifier, train_binary_classifier
 from .config import ClassifierConfig, TrainingConfig
 from .metrics import calculate_binary_metrics, save_metrics_to_csv
+from .results import BinaryMetrics
 from .utils import (
     register_classification_fitness_functions,
     apply_sigmoid,
@@ -107,6 +108,7 @@ __all__ = [
     'TrainingConfig',
     
     # Metrics
+    'BinaryMetrics',
     'calculate_binary_metrics',
     'save_metrics_to_csv',
     

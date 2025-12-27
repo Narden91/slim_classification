@@ -30,6 +30,7 @@ import torch
 from typing import Dict, Optional, Protocol, TYPE_CHECKING, Union
 
 from .metrics import calculate_binary_metrics
+from .results import BinaryMetrics
 from .utils import apply_sigmoid
 from .validators import (
     validate_binary_labels,
@@ -192,6 +193,115 @@ class BinaryClassifier:
             f"strategy={self._strategy.name}"
         )
     
+    def __repr__(self) -> str:
+        """
+        Return detailed string representation of the classifier.
+        
+        Returns
+        -------
+        str
+            String representation showing configuration.
+            
+        Examples
+        --------
+        >>> print(repr(classifier))
+        BinaryClassifier(threshold=0.5, use_sigmoid=True, sigmoid_scale=1.0, strategy=sigmoid(scale=1.0, threshold=0.5))
+        """
+        return (
+            f"BinaryClassifier("
+            f"threshold={self.threshold}, "
+            f"use_sigmoid={self.use_sigmoid}, "
+            f"sigmoid_scale={self.sigmoid_scale}, "
+            f"strategy={self._strategy.name})"
+        )
+    
+    def __eq__(self, other: object) -> bool:
+        """
+        Check equality with another BinaryClassifier.
+        
+        Parameters
+        ----------
+        other : object
+            Object to compare with.
+            
+        Returns
+        -------
+        bool
+            True if classifiers have same configuration (model comparison excluded).
+            
+        Examples
+        --------
+        >>> classifier1 = BinaryClassifier(model, threshold=0.5)
+        >>> classifier2 = BinaryClassifier(model, threshold=0.5)
+        >>> classifier1 == classifier2
+        True
+        """
+        if not isinstance(other, BinaryClassifier):
+            return NotImplemented
+        
+        return (
+            self.threshold == other.threshold and
+            self.use_sigmoid == other.use_sigmoid and
+            self.sigmoid_scale == other.sigmoid_scale and
+            self._strategy.name == other._strategy.name
+        )
+    
+    @classmethod
+    def from_config(
+        cls,
+        model: GPModelProtocol,
+        config: 'ClassifierConfig'
+    ) -> 'BinaryClassifier':
+        """
+        Create a BinaryClassifier from a ClassifierConfig.
+        
+        Parameters
+        ----------
+        model : GPModelProtocol
+            The trained GP-based model.
+        config : ClassifierConfig
+            Configuration for the classifier.
+            
+        Returns
+        -------
+        BinaryClassifier
+            New classifier instance.
+            
+        Examples
+        --------
+        >>> config = ClassifierConfig(threshold=0.6, sigmoid_scale=2.0)
+        >>> classifier = BinaryClassifier.from_config(model, config)
+        >>> classifier.threshold
+        0.6
+        """
+        return cls(model, config=config)
+    
+    def with_strategy(self, strategy: PredictionStrategy) -> 'BinaryClassifier':
+        """
+        Create a new classifier with a different prediction strategy.
+        
+        This method returns a new instance with the same model but
+        different prediction strategy, following immutable design.
+        
+        Parameters
+        ----------
+        strategy : PredictionStrategy
+            New prediction strategy to use.
+            
+        Returns
+        -------
+        BinaryClassifier
+            New classifier instance with updated strategy.
+            
+        Examples
+        --------
+        >>> from slim_gsgp.classification.strategies import SignBasedStrategy
+        >>> new_classifier = classifier.with_strategy(SignBasedStrategy())
+        >>> new_classifier.strategy.name
+        'sign-based'
+        """
+        return BinaryClassifier(self.model, strategy=strategy)
+    
     def _create_strategy(self) -> PredictionStrategy:
         """Create a prediction strategy from current configuration."""
         if self.use_sigmoid:
@@ -285,7 +395,7 @@ class BinaryClassifier:
         self, 
         X: torch.Tensor, 
         y: torch.Tensor
-    ) -> Dict[str, Union[float, int]]:
+    ) -> BinaryMetrics:
         """
         Evaluate the classifier on test data.
 
@@ -298,8 +408,8 @@ class BinaryClassifier:
 
         Returns
         -------
-        Dict[str, Union[float, int]]
-            Dictionary containing evaluation metrics including:
+        BinaryMetrics
+            Dataclass containing evaluation metrics including:
             - accuracy, precision, recall, f1, specificity
             - true_positives, true_negatives, false_positives, false_negatives
             
@@ -313,10 +423,13 @@ class BinaryClassifier:
         Examples
         --------
         >>> metrics = classifier.evaluate(X_test, y_test)
+        >>> print(f\"Accuracy: {metrics.accuracy:.4f}\")
+        Accuracy: 0.9234
+        >>> print(f\"F1 Score: {metrics.f1:.4f}\")
+        F1 Score: 0.9156
+        >>> # Dict-like access also works
         >>> print(f\"Accuracy: {metrics['accuracy']:.4f}\")
         Accuracy: 0.9234
-        >>> print(f\"F1 Score: {metrics['f1']:.4f}\")
-        F1 Score: 0.9156
         """
         validate_tensor_shape(X, name="X")
         validate_tensor_shape(y, name="y")

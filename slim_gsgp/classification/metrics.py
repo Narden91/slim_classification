@@ -40,6 +40,7 @@ from sklearn.metrics import (
     confusion_matrix
 )
 from slim_gsgp.utils.utils import create_result_directory
+from .results import BinaryMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ def _to_numpy(tensor: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
 def calculate_binary_metrics(
     y_true: Union[torch.Tensor, np.ndarray], 
     y_pred: Union[torch.Tensor, np.ndarray]
-) -> Dict[str, Union[float, int, np.ndarray]]:
+) -> BinaryMetrics:
     """
     Calculate standard metrics for binary classification.
 
@@ -79,8 +80,8 @@ def calculate_binary_metrics(
 
     Returns
     -------
-    Dict[str, Union[float, int, np.ndarray]]
-        Dictionary containing various classification metrics:
+    BinaryMetrics
+        Dataclass containing various classification metrics:
         - accuracy: Overall prediction accuracy
         - precision: Precision score (TP / (TP + FP))
         - recall: Recall/sensitivity score (TP / (TP + FN))
@@ -94,37 +95,54 @@ def calculate_binary_metrics(
     >>> y_true = torch.tensor([0., 1., 1., 0., 1.])
     >>> y_pred = torch.tensor([0., 1., 0., 0., 1.])
     >>> metrics = calculate_binary_metrics(y_true, y_pred)
-    >>> metrics['accuracy']
+    >>> metrics.accuracy
     0.8
-    >>> metrics['true_positives']
+    >>> metrics['accuracy']  # Dict-like access also works
+    0.8
+    >>> metrics.true_positives
     2
+    
+    Notes
+    -----
+    Returns BinaryMetrics dataclass which supports both attribute access
+    (metrics.accuracy) and dict-like access (metrics['accuracy']) for
+    backward compatibility.
     """
     # Convert to numpy efficiently (single conversion per input)
     y_true_np = _to_numpy(y_true)
     y_pred_np = _to_numpy(y_pred)
 
-    # Calculate basic metrics
-    metrics = {
-        'accuracy': accuracy_score(y_true_np, y_pred_np),
-        'precision': precision_score(y_true_np, y_pred_np, zero_division=0),
-        'recall': recall_score(y_true_np, y_pred_np, zero_division=0),
-        'f1': f1_score(y_true_np, y_pred_np, zero_division=0),
-        'confusion_matrix': confusion_matrix(y_true_np, y_pred_np)
-    }
-
-    # Add derived metrics from confusion matrix
-    cm = metrics['confusion_matrix']
-    if cm.shape == (2, 2):  # Binary classification
+    # Calculate confusion matrix first
+    cm = confusion_matrix(y_true_np, y_pred_np)
+    
+    # Extract components for binary classification
+    if cm.shape == (2, 2):
         tn, fp, fn, tp = cm.ravel()
-        metrics['true_positives'] = int(tp)
-        metrics['true_negatives'] = int(tn)
-        metrics['false_positives'] = int(fp)
-        metrics['false_negatives'] = int(fn)
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    else:
+        # Handle edge case where only one class is present
+        tp = tn = fp = fn = 0
+        specificity = 0.0
 
-        # Calculate specificity (true negative rate)
-        metrics['specificity'] = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    # Calculate basic metrics
+    accuracy = accuracy_score(y_true_np, y_pred_np)
+    precision = precision_score(y_true_np, y_pred_np, zero_division=0)
+    recall = recall_score(y_true_np, y_pred_np, zero_division=0)
+    f1 = f1_score(y_true_np, y_pred_np, zero_division=0)
 
-    return metrics
+    # Return typed dataclass
+    return BinaryMetrics(
+        accuracy=float(accuracy),
+        precision=float(precision),
+        recall=float(recall),
+        f1=float(f1),
+        specificity=float(specificity),
+        true_positives=int(tp),
+        true_negatives=int(tn),
+        false_positives=int(fp),
+        false_negatives=int(fn),
+        confusion_matrix=cm
+    )
 
 
 def save_metrics_to_csv(

@@ -37,6 +37,7 @@ Examples
 """
 
 import logging
+import threading
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
@@ -80,14 +81,15 @@ class AlgorithmFactory(AlgorithmFactoryBase):
     
     This factory implements the Factory Pattern to create different
     GP-based models (GP, GSGP, SLIM) with a unified interface.
-    It supports dynamic registration of new algorithms.
+    It supports dynamic registration of new algorithms with thread-safe
+    singleton pattern for global registry.
     
     Attributes
     ----------
     _creators : Dict[str, AlgorithmCreator]
-        Registry mapping algorithm names to their creator functions.
+        Instance-level registry mapping algorithm names to their creator functions.
     _default_kwargs : Dict[str, Dict[str, Any]]
-        Default keyword arguments for each algorithm.
+        Instance-level default keyword arguments for each algorithm.
         
     Examples
     --------
@@ -106,12 +108,18 @@ class AlgorithmFactory(AlgorithmFactoryBase):
     >>> def my_gp_variant(X_train, y_train, **kwargs):
     ...     return custom_implementation(X_train, y_train, **kwargs)
     >>> factory.register('my_gp', my_gp_variant)
+    
+    Notes
+    -----
+    Thread-safe singleton pattern is used for global registry to prevent
+    race conditions when multiple threads register algorithms.
     """
     
-    # Class-level default registry for singleton-like behavior
+    # Class-level global registry with thread-safe initialization
     _global_creators: Dict[str, AlgorithmCreator] = {}
     _global_defaults: Dict[str, Dict[str, Any]] = {}
     _initialized: bool = False
+    _lock = threading.Lock()  # Thread safety for initialization
     
     def __init__(self) -> None:
         """Initialize the algorithm factory with built-in algorithms."""
@@ -119,10 +127,13 @@ class AlgorithmFactory(AlgorithmFactoryBase):
         self._creators: Dict[str, AlgorithmCreator] = {}
         self._default_kwargs: Dict[str, Dict[str, Any]] = {}
         
-        # Initialize global creators once
+        # Initialize global creators once (thread-safe)
         if not AlgorithmFactory._initialized:
-            self._register_builtin_algorithms()
-            AlgorithmFactory._initialized = True
+            with AlgorithmFactory._lock:
+                # Double-check locking pattern
+                if not AlgorithmFactory._initialized:
+                    self._register_builtin_algorithms()
+                    AlgorithmFactory._initialized = True
     
     def _register_builtin_algorithms(self) -> None:
         """Register the built-in GP-based algorithms."""
@@ -142,6 +153,30 @@ class AlgorithmFactory(AlgorithmFactoryBase):
         AlgorithmFactory._global_defaults['slim'] = {}
         
         logger.debug("Registered built-in algorithms: gp, gsgp, slim")
+    
+    @classmethod
+    def reset_factory(cls) -> None:
+        """
+        Reset the factory to initial state (for testing purposes).
+        
+        This method clears all registered algorithms and resets initialization
+        flag, allowing fresh registration. Use with caution in production code.
+        
+        Examples
+        --------
+        >>> AlgorithmFactory.reset_factory()  # Clear all registrations
+        >>> factory = AlgorithmFactory()  # Fresh factory with built-ins only
+        
+        Notes
+        -----
+        This is primarily intended for testing and should not be used in
+        production code as it affects the global state.
+        """
+        with cls._lock:
+            cls._global_creators.clear()
+            cls._global_defaults.clear()
+            cls._initialized = False
+            logger.info("Factory reset to initial state")
     
     def register(
         self, 

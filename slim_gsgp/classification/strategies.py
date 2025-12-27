@@ -43,6 +43,7 @@ from typing import Optional, Tuple, Type
 import torch
 
 from .validators import validate_threshold, validate_scaling_factor
+from .utils import apply_sigmoid, binary_sign_transform
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +158,8 @@ class SigmoidStrategy(PredictionStrategy):
         torch.Tensor
             Binary predictions (0 or 1).
         """
-        probs = torch.sigmoid(raw_outputs * self.scale)
+        # Delegate to utility function for sigmoid transformation
+        probs = apply_sigmoid(raw_outputs, scaling_factor=self.scale, _skip_validation=True)
         return (probs > self.threshold).float()
     
     def predict_proba(self, raw_outputs: torch.Tensor) -> torch.Tensor:
@@ -174,7 +176,8 @@ class SigmoidStrategy(PredictionStrategy):
         torch.Tensor
             Probabilities of shape (n_samples, 2).
         """
-        probs = torch.sigmoid(raw_outputs * self.scale)
+        # Delegate to utility function for sigmoid transformation
+        probs = apply_sigmoid(raw_outputs, scaling_factor=self.scale, _skip_validation=True)
         return torch.stack([1 - probs, probs], dim=1)
     
     @property
@@ -216,7 +219,8 @@ class SignBasedStrategy(PredictionStrategy):
         torch.Tensor
             Binary predictions (0 for negative, 1 for non-negative).
         """
-        return (raw_outputs >= 0).float()
+        # Delegate to utility function
+        return binary_sign_transform(raw_outputs)
     
     def predict_proba(self, raw_outputs: torch.Tensor) -> torch.Tensor:
         """
@@ -232,7 +236,8 @@ class SignBasedStrategy(PredictionStrategy):
         torch.Tensor
             Hard probabilities of shape (n_samples, 2).
         """
-        probs = (raw_outputs >= 0).float()
+        # Use utility function for prediction
+        probs = binary_sign_transform(raw_outputs)
         return torch.stack([1 - probs, probs], dim=1)
     
     @property
@@ -283,9 +288,8 @@ class SoftmaxStrategy(PredictionStrategy):
         torch.Tensor
             Binary predictions.
         """
-        # Create logits for binary classification
-        scaled = raw_outputs / self.temperature
-        probs = torch.sigmoid(scaled)
+        # Create logits for binary classification using temperature-scaled sigmoid
+        probs = apply_sigmoid(raw_outputs, scaling_factor=1.0/self.temperature, _skip_validation=True)
         return (probs > 0.5).float()
     
     def predict_proba(self, raw_outputs: torch.Tensor) -> torch.Tensor:
@@ -302,8 +306,7 @@ class SoftmaxStrategy(PredictionStrategy):
         torch.Tensor
             Probabilities of shape (n_samples, 2).
         """
-        scaled = raw_outputs / self.temperature
-        probs = torch.sigmoid(scaled)
+        probs = apply_sigmoid(raw_outputs, scaling_factor=1.0/self.temperature, _skip_validation=True)
         return torch.stack([1 - probs, probs], dim=1)
     
     @property

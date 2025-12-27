@@ -65,6 +65,7 @@ from .exceptions import (
     InvalidThresholdError,
     InvalidShapeError,
     FitnessRegistrationError,
+    InvalidScalingFactorError,
 )
 from .factories import (
     AlgorithmFactory,
@@ -139,6 +140,7 @@ __all__ = [
     'InvalidThresholdError',
     'InvalidShapeError',
     'FitnessRegistrationError',
+    'InvalidScalingFactorError',
     
     # Deprecated (backward compatibility)
     'modified_sigmoid',

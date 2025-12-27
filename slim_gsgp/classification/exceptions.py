@@ -82,3 +82,13 @@ class FitnessRegistrationError(ClassificationError):
         - Invalid fitness function configuration
     """
     pass
+
+
+class InvalidScalingFactorError(ClassificationError):
+    """Raised when sigmoid scaling factor is invalid.
+    
+    Examples:
+        - Non-positive scaling factor
+        - Non-numeric scaling factor value
+    """
+    pass

@@ -32,7 +32,8 @@ from typing import Optional
 from .exceptions import (
     InvalidLabelError,
     InvalidThresholdError,
-    InvalidShapeError
+    InvalidShapeError,
+    InvalidScalingFactorError
 )
 
 
@@ -266,23 +267,23 @@ def validate_scaling_factor(scale: float, name: str = "scaling_factor") -> float
         
     Raises
     ------
-    ValueError
-        If scale is not positive.
+    InvalidScalingFactorError
+        If scale is not positive or not numeric.
         
     Examples
     --------
     >>> validated = validate_scaling_factor(1.0)
     >>> validated
     1.0
-    >>> validate_scaling_factor(-1.0)  # Raises ValueError
+    >>> validate_scaling_factor(-1.0)  # Raises InvalidScalingFactorError
     """
     if not isinstance(scale, (int, float)):
-        raise ValueError(
+        raise InvalidScalingFactorError(
             f"{name} must be numeric, got {type(scale).__name__}"
         )
     
     if scale <= 0:
-        raise ValueError(
+        raise InvalidScalingFactorError(
             f"{name} must be positive, got {scale}"
         )
     

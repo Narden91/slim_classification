@@ -32,6 +32,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import contextlib
 from slim_gsgp.algorithms.GP.representations.tree import Tree as GP_Tree
 from slim_gsgp.algorithms.GSGP.representations.tree import Tree
 from slim_gsgp.algorithms.SLIM_GSGP.representations.individual import Individual
@@ -355,7 +356,14 @@ class SLIM_GSGP:
         max_depth: int = 17,
         n_elites: int = 1,
         reconstruct: bool = True,
-        n_jobs: int = 1) -> None:
+        n_jobs: int = 1,
+        *,
+        profile: bool = False,
+        profile_cuda_sync: bool = True,
+        torch_profile: bool = False,
+        torch_profile_steps: int = 2,
+        torch_profile_trace_dir: Optional[str] = None,
+    ) -> None:
         """
         Solve the optimization problem using SLIM_GSGP.
 
@@ -407,33 +415,85 @@ class SLIM_GSGP:
         random.seed(self.seed)
 
         # starting time count
+        def _maybe_sync() -> None:
+            if not profile_cuda_sync:
+                return
+            try:
+                if (isinstance(X_train, torch.Tensor) and X_train.is_cuda) or (isinstance(y_train, torch.Tensor) and y_train.is_cuda):
+                    torch.cuda.synchronize()
+            except Exception:
+                return
+
+        def _now() -> float:
+            return time.perf_counter()
+
+        profile_enabled = bool(profile or torch_profile)
+        timing_totals: Dict[str, float] = {}
+        timing_per_gen: List[Dict[str, float]] = []
+
+        def _tadd(bucket: Dict[str, float], key: str, dt: float) -> None:
+            bucket[key] = bucket.get(key, 0.0) + float(dt)
+
+        @contextlib.contextmanager
+        def _stage(bucket: Dict[str, float], key: str):
+            if not profile_enabled:
+                yield
+                return
+            _maybe_sync()
+            t0 = _now()
+            try:
+                yield
+            finally:
+                _maybe_sync()
+                _tadd(bucket, key, _now() - t0)
+
+        prof = None
+        if torch_profile:
+            active_steps = max(1, int(torch_profile_steps))
+            activities = [torch.profiler.ProfilerActivity.CPU]
+            if torch.cuda.is_available() and (isinstance(X_train, torch.Tensor) and X_train.is_cuda):
+                activities.append(torch.profiler.ProfilerActivity.CUDA)
+
+            prof = torch.profiler.profile(
+                activities=activities,
+                schedule=torch.profiler.schedule(wait=0, warmup=0, active=active_steps, repeat=1),
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=False,
+            )
+            prof.__enter__()
+
+        # starting time count
         start = time.time()
 
-        # creating the initial population
-        population = Population(
-            [
-                Individual(
-                    collection=[
-                        Tree(
-                            tree,
-                            train_semantics=None,
-                            test_semantics=None,
-                            reconstruct=True,
-                        )
-                    ],
-                    train_semantics=None,
-                    test_semantics=None,
-                    reconstruct=True,
-                )
-                for tree in self.initializer(**self.pi_init)
-            ]
-        )
+        with _stage(timing_totals, "init_population"):
+            population = Population(
+                [
+                    Individual(
+                        collection=[
+                            Tree(
+                                tree,
+                                train_semantics=None,
+                                test_semantics=None,
+                                reconstruct=True,
+                            )
+                        ],
+                        train_semantics=None,
+                        test_semantics=None,
+                        reconstruct=True,
+                    )
+                    for tree in self.initializer(**self.pi_init)
+                ]
+            )
 
-        # calculating initial population semantics
-        population.calculate_semantics(X_train)
+        with _stage(timing_totals, "calculate_semantics_train"):
+            population.calculate_semantics(X_train)
 
-        # evaluating the initial population
-        population.evaluate(ffunction, y=y_train, operator=self.operator, n_jobs=n_jobs)
+        with _stage(timing_totals, "evaluate_train"):
+            population.evaluate(ffunction, y=y_train, operator=self.operator, n_jobs=n_jobs)
+
+        if prof is not None:
+            prof.step()
 
         # Expose the current population for downstream inspection even if n_iter == 0
         self.population = population
@@ -443,31 +503,31 @@ class SLIM_GSGP:
         # setting up the elite(s)
         self.elites, self.elite = self.find_elit_func(population, n_elites)
 
-        # calculating the testing semantics and the elite's testing fitness if test_elite is true
         if test_elite:
-            population.calculate_semantics(X_test, testing=True)
-            self.elite.evaluate(
-                ffunction, y=y_test, testing=True, operator=self.operator
-            )
+            with _stage(timing_totals, "test_elite"):
+                population.calculate_semantics(X_test, testing=True)
+                self.elite.evaluate(
+                    ffunction, y=y_test, testing=True, operator=self.operator
+                )
 
-        # Log initial population results
         if log != 0 and log_path is not None:
-            # Log to evolution CSV
-            self._log_evolution_to_csv(log_path, 0, end - start, population, run_info)
+            with _stage(timing_totals, "logging"):
+                self._log_evolution_to_csv(log_path, 0, end - start, population, run_info)
 
-        # displaying the results on console if verbose level is more than 0
         if verbose != 0:
-            verbose_reporter(
-                curr_dataset,
-                0,
-                self.elite.fitness,
-                self.elite.test_fitness,
-                end - start,
-                self.elite.nodes_count,
-            )
+            with _stage(timing_totals, "logging"):
+                verbose_reporter(
+                    curr_dataset,
+                    0,
+                    self.elite.fitness,
+                    self.elite.test_fitness,
+                    end - start,
+                    self.elite.nodes_count,
+                )
 
         # begining the evolution process
         for it in range(1, n_iter + 1, 1):
+            gen_bucket: Dict[str, float] = {}
             # starting an empty offspring population
             offs_pop, start = [], time.time()
 
@@ -475,40 +535,66 @@ class SLIM_GSGP:
             if elitism:
                 offs_pop.extend(self.elites)
 
-            # filling the offspring population
-            while len(offs_pop) < self.pop_size:
+            with _stage(gen_bucket, "offspring_generation"):
+                while len(offs_pop) < self.pop_size:
 
-                # choosing between crossover and mutation
+                    # choosing between crossover and mutation
+                    if random.random() < self.p_xo:
 
-                if random.random() < self.p_xo:
-
-                    p1, p2 = self.selector(population), self.selector(population)
-                    while p1 == p2:
                         p1, p2 = self.selector(population), self.selector(population)
+                        while p1 == p2:
+                            p1, p2 = self.selector(population), self.selector(population)
 
-                    off1 = self._crossover_offspring(
-                        p1,
-                        p2,
-                        reconstruct=reconstruct,
-                        max_depth=max_depth,
-                    )
+                        off1 = self._crossover_offspring(
+                            p1,
+                            p2,
+                            reconstruct=reconstruct,
+                            max_depth=max_depth,
+                        )
 
-                    # add crossover offspring
-                    offs_pop.append(off1)
-                else:
-                    # so, mutation was selected. Now deflation or inflation is selected.
-                    if random.random() < self.p_deflate:
+                        # add crossover offspring
+                        offs_pop.append(off1)
+                    else:
+                        # so, mutation was selected. Now deflation or inflation is selected.
+                        if random.random() < self.p_deflate:
 
-                        # selecting the parent to deflate
-                        p1 = self.selector(population)
+                            # selecting the parent to deflate
+                            p1 = self.selector(population)
 
-                        # Parent cannot be deflated, handle according to copy_parent setting
-                        if p1.size == 1:
-                            if self.copy_parent:
-                                off1 = self._copy_individual(p1, reconstruct)
+                            # Parent cannot be deflated, handle according to copy_parent setting
+                            if p1.size == 1:
+                                if self.copy_parent:
+                                    off1 = self._copy_individual(p1, reconstruct)
+                                else:
+                                    # Inflate instead of deflate
+                                    ms_ = self.ms()
+                                    off1 = self.inflate_mutator(
+                                        p1,
+                                        ms_,
+                                        X_train,
+                                        max_depth=self.pi_init["init_depth"],
+                                        p_c=self.pi_init["p_c"],
+                                        X_test=X_test,
+                                        reconstruct=reconstruct,
+                                    )
                             else:
-                                # Inflate instead of deflate
-                                ms_ = self.ms()
+                                # Normal deflation
+                                off1 = self.deflate_mutator(p1, reconstruct=reconstruct)
+
+                        # Inflation mutation was selected
+                        else:
+                            p1 = self.selector(population)
+                            ms_ = self.ms()
+
+                            # Check if parent can be inflated
+                            if max_depth is not None and p1.depth == max_depth:
+                                # Parent cannot be inflated
+                                if self.copy_parent:
+                                    off1 = self._copy_individual(p1, reconstruct)
+                                else:
+                                    off1 = self.deflate_mutator(p1, reconstruct=reconstruct)
+                            else:
+                                # Normal inflation
                                 off1 = self.inflate_mutator(
                                     p1,
                                     ms_,
@@ -518,57 +604,31 @@ class SLIM_GSGP:
                                     X_test=X_test,
                                     reconstruct=reconstruct,
                                 )
-                        else:
-                            # Normal deflation
-                            off1 = self.deflate_mutator(p1, reconstruct=reconstruct)
 
-                    # Inflation mutation was selected
-                    else:
-                        p1 = self.selector(population)
-                        ms_ = self.ms()
+                                # Check if offspring exceeds max depth after inflation
+                                if max_depth is not None and off1.depth > max_depth:
+                                    if self.copy_parent:
+                                        off1 = self._copy_individual(p1, reconstruct)
+                                    else:
+                                        off1 = self.deflate_mutator(p1, reconstruct=reconstruct)
 
-                        # Check if parent can be inflated
-                        if max_depth is not None and p1.depth == max_depth:
-                            # Parent cannot be inflated
-                            if self.copy_parent:
-                                off1 = self._copy_individual(p1, reconstruct)
-                            else:
-                                off1 = self.deflate_mutator(p1, reconstruct=reconstruct)
-                        else:
-                            # Normal inflation
-                            off1 = self.inflate_mutator(
-                                p1,
-                                ms_,
-                                X_train,
-                                max_depth=self.pi_init["init_depth"],
-                                p_c=self.pi_init["p_c"],
-                                X_test=X_test,
-                                reconstruct=reconstruct,
-                            )
-
-                            # Check if offspring exceeds max depth after inflation
-                            if max_depth is not None and off1.depth > max_depth:
-                                if self.copy_parent:
-                                    off1 = self._copy_individual(p1, reconstruct)
-                                else:
-                                    off1 = self.deflate_mutator(p1, reconstruct=reconstruct)
-
-                    # adding the new offspring to the offspring population
-                    offs_pop.append(off1)
+                        # adding the new offspring to the offspring population
+                        offs_pop.append(off1)
 
 
-            # removing any excess individuals from the offspring population
-            if len(offs_pop) > population.size:
+            with _stage(gen_bucket, "offspring_finalize"):
+                if len(offs_pop) > population.size:
+                    offs_pop = offs_pop[: population.size]
+                offs_pop = Population(offs_pop)
 
-                offs_pop = offs_pop[: population.size]
+            with _stage(gen_bucket, "calculate_semantics_train"):
+                offs_pop.calculate_semantics(X_train)
 
-            # turning the offspring population into a Population
-            offs_pop = Population(offs_pop)
-            # calculating the offspring population semantics
-            offs_pop.calculate_semantics(X_train)
+            with _stage(gen_bucket, "evaluate_train"):
+                offs_pop.evaluate(ffunction, y=y_train, operator=self.operator, n_jobs=n_jobs)
 
-            # evaluating the offspring population
-            offs_pop.evaluate(ffunction, y=y_train, operator=self.operator, n_jobs=n_jobs)
+            if prof is not None and it <= max(1, int(torch_profile_steps)):
+                prof.step()
 
             # replacing the current population with the offspring population P = P'
             population = offs_pop
@@ -579,25 +639,57 @@ class SLIM_GSGP:
             # setting the new elite(s)
             self.elites, self.elite = self.find_elit_func(population, n_elites)
 
-            # calculating the testing semantics and the elite's testing fitness if test_elite is true
             if test_elite:
-                self.elite.calculate_semantics(X_test, testing=True)
-                self.elite.evaluate(
-                    ffunction, y=y_test, testing=True, operator=self.operator
-                )
+                with _stage(gen_bucket, "test_elite"):
+                    self.elite.calculate_semantics(X_test, testing=True)
+                    self.elite.evaluate(
+                        ffunction, y=y_test, testing=True, operator=self.operator
+                    )
 
-            # Log generation results
-            if log != 0 and log_path is not None:           
-                # Log to evolution CSV
-                self._log_evolution_to_csv(log_path, it, end - start, population, run_info)
+            if log != 0 and log_path is not None:
+                with _stage(gen_bucket, "logging"):
+                    self._log_evolution_to_csv(log_path, it, end - start, population, run_info)
 
-            # displaying the results on console if verbose level is more than 0
             if verbose != 0:
-                verbose_reporter(
-                    run_info[-1],
-                    it,
-                    self.elite.fitness,
-                    self.elite.test_fitness,
-                    end - start,
-                    self.elite.nodes_count,
-                )
+                with _stage(gen_bucket, "logging"):
+                    verbose_reporter(
+                        run_info[-1],
+                        it,
+                        self.elite.fitness,
+                        self.elite.test_fitness,
+                        end - start,
+                        self.elite.nodes_count,
+                    )
+
+            if profile_enabled:
+                timing_per_gen.append(gen_bucket)
+
+        if prof is not None:
+            try:
+                if torch_profile_trace_dir:
+                    Path(torch_profile_trace_dir).mkdir(parents=True, exist_ok=True)
+                    trace_path = os.path.join(torch_profile_trace_dir, f"slim_trace_{int(time.time())}.json")
+                    prof.export_chrome_trace(trace_path)
+                    print(f"[SLIM torch.profiler] Chrome trace written to: {trace_path}")
+
+                # Print a short summary table.
+                sort_key = "self_cuda_time_total" if torch.cuda.is_available() else "self_cpu_time_total"
+                print(prof.key_averages().table(sort_by=sort_key, row_limit=30))
+            finally:
+                prof.__exit__(None, None, None)
+
+        if profile_enabled:
+            # Aggregate generation buckets into totals (kept separate from init).
+            gen_totals: Dict[str, float] = {}
+            for gb in timing_per_gen:
+                for k, v in gb.items():
+                    gen_totals[k] = gen_totals.get(k, 0.0) + float(v)
+
+            def _fmt(d: Dict[str, float]) -> str:
+                parts = [f"{k}={d[k]:.4f}s" for k in sorted(d.keys())]
+                return ", ".join(parts)
+
+            print("[SLIM profile] Totals (init):", _fmt(timing_totals))
+            if timing_per_gen:
+                print("[SLIM profile] Totals (gens):", _fmt(gen_totals))
+                print("[SLIM profile] Avg/gen:", _fmt({k: v / len(timing_per_gen) for k, v in gen_totals.items()}))

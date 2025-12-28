@@ -48,6 +48,14 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=74)
     parser.add_argument("--slim-version", type=str, default="SLIM+SIG2")
     parser.add_argument("--p-inflate", type=float, default=0.5)
+
+    # Profiling (Phase 0)
+    parser.add_argument("--profile", action="store_true", help="Print SLIM stage timing breakdown")
+    parser.add_argument("--profile-cuda-sync", action="store_true", help="Synchronize CUDA for accurate timings")
+    parser.set_defaults(profile_cuda_sync=True)
+    parser.add_argument("--torch-profile", action="store_true", help="Enable torch.profiler summary + optional trace")
+    parser.add_argument("--torch-profile-steps", type=int, default=2, help="Number of steps to record in torch.profiler")
+    parser.add_argument("--torch-profile-trace-dir", type=str, default=None, help="Directory to write chrome trace JSON")
     args = parser.parse_args()
 
     resolved_device = _resolve_device(args.device)
@@ -111,6 +119,11 @@ def main() -> None:
         seed=args.seed,
         max_depth=args.max_depth,
         n_jobs=1,
+        profile=args.profile,
+        profile_cuda_sync=args.profile_cuda_sync,
+        torch_profile=args.torch_profile,
+        torch_profile_steps=args.torch_profile_steps,
+        torch_profile_trace_dir=args.torch_profile_trace_dir,
     )
 
     # Show the best individual structure at the last generation

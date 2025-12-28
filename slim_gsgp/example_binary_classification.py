@@ -137,6 +137,14 @@ def parse_arguments():
         help="Device to use for tensors (auto/cpu/cuda)",
     )
 
+    # Profiling (Phase 0)
+    parser.add_argument("--profile", action="store_true", help="Print SLIM stage timing breakdown")
+    parser.add_argument("--profile-cuda-sync", action="store_true", help="Synchronize CUDA for accurate timings")
+    parser.set_defaults(profile_cuda_sync=True)
+    parser.add_argument("--torch-profile", action="store_true", help="Enable torch.profiler summary + optional trace")
+    parser.add_argument("--torch-profile-steps", type=int, default=2, help="Number of steps to record in torch.profiler")
+    parser.add_argument("--torch-profile-trace-dir", type=str, default=None, help="Directory to write chrome trace JSON")
+
     # Explainability / Tree export arguments
     parser.add_argument("--export-tree", action="store_true", default=False,
                         help="Export final tree (visualization and formula)")
@@ -355,6 +363,13 @@ def setup_algorithm_params(args, dataset_name):
         algo_params['ms_upper'] = 1
 
         algo_params['log_path'] = os.path.join(results_dir, f"run_seed_{args.seed}.csv")
+
+        # Profiling (Phase 0)
+        algo_params['profile'] = getattr(args, 'profile', False)
+        algo_params['profile_cuda_sync'] = getattr(args, 'profile_cuda_sync', True)
+        algo_params['torch_profile'] = getattr(args, 'torch_profile', False)
+        algo_params['torch_profile_steps'] = getattr(args, 'torch_profile_steps', 2)
+        algo_params['torch_profile_trace_dir'] = getattr(args, 'torch_profile_trace_dir', None)
 
     return algo_params
 

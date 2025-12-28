@@ -69,7 +69,13 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
          max_depth: int | None = slim_gsgp_solve_parameters["max_depth"],
          n_jobs: int = slim_gsgp_solve_parameters["n_jobs"],
          tournament_size: int = 2,
-         test_elite: bool = slim_gsgp_solve_parameters["test_elite"]):
+         test_elite: bool = slim_gsgp_solve_parameters["test_elite"],
+         *,
+         profile: bool = False,
+         profile_cuda_sync: bool = True,
+         torch_profile: bool = False,
+         torch_profile_steps: int = 2,
+         torch_profile_trace_dir: str | None = None):
     """
     Main function to execute the SLIM GSGP algorithm on specified datasets.
 
@@ -305,6 +311,13 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     slim_gsgp_solve_parameters["max_depth"] = max_depth
     slim_gsgp_solve_parameters["n_jobs"] = n_jobs
     slim_gsgp_solve_parameters["test_elite"] = test_elite
+
+    # Optional profiling (Phase 0). No behavior change when disabled.
+    slim_gsgp_solve_parameters["profile"] = profile
+    slim_gsgp_solve_parameters["profile_cuda_sync"] = profile_cuda_sync
+    slim_gsgp_solve_parameters["torch_profile"] = torch_profile
+    slim_gsgp_solve_parameters["torch_profile_steps"] = torch_profile_steps
+    slim_gsgp_solve_parameters["torch_profile_trace_dir"] = torch_profile_trace_dir
 
     # ================================
     #       Running the Algorithm

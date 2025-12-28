@@ -128,6 +128,15 @@ def parse_arguments():
     parser.add_argument("--save-visualization", type=bool, default=False,
                         help="Save tree visualization")
 
+    # Device control
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        choices=["auto", "cpu", "cuda"],
+        help="Device to use for tensors (auto/cpu/cuda)",
+    )
+
     # Explainability / Tree export arguments
     parser.add_argument("--export-tree", action="store_true", default=False,
                         help="Export final tree (visualization and formula)")
@@ -659,6 +668,30 @@ def run_experiment(config):
     """
     root_dir = get_project_root()
 
+    # Ensure configured device is applied consistently across:
+    # - algorithm constants (gp/gsgp/slim config modules)
+    # - dataset tensors (X/y)
+    requested_device = getattr(config, "device", "auto")
+    if requested_device == "auto":
+        resolved_device = "cuda" if torch.cuda.is_available() else "cpu"
+    else:
+        resolved_device = requested_device
+
+    # Keep global config modules in sync with the requested device.
+    # These modules generate constants using their internal DEVICE.
+    try:
+        from slim_gsgp.config.gp_config import set_device as _gp_set_device
+        from slim_gsgp.config.gsgp_config import set_device as _gsgp_set_device
+        from slim_gsgp.config.slim_config import set_device as _slim_set_device
+
+        _gp_set_device(resolved_device)
+        _gsgp_set_device(resolved_device)
+        _slim_set_device(resolved_device)
+    except Exception:
+        # Device config is a performance feature; do not fail the experiment
+        # if some environments import config modules differently.
+        pass
+
     # Register binary fitness functions
     # register_classification_fitness_functions()
 
@@ -666,6 +699,16 @@ def run_experiment(config):
     X_train, X_val, X_test, y_train, y_val, y_test, n_classes, class_labels = load_and_split_dataset(
         config.dataset, config.seed
     )
+
+    # Move tensors to the selected device (prevents CPU/CUDA mismatch when
+    # constants/operators are built on GPU).
+    device_obj = torch.device(resolved_device)
+    X_train = X_train.to(device_obj)
+    y_train = y_train.to(device_obj)
+    X_val = X_val.to(device_obj)
+    y_val = y_val.to(device_obj)
+    X_test = X_test.to(device_obj)
+    y_test = y_test.to(device_obj)
 
     # Set up algorithm parameters
     algo_params = setup_algorithm_params(config, config.dataset)
@@ -685,6 +728,7 @@ def run_experiment(config):
     print(f"  Use sigmoid: {config.use_sigmoid}")
     print(f"  Sigmoid scale: {config.sigmoid_scale}")
     print(f"  Max depth: {config.max_depth}")
+    print(f"  Device: {requested_device} (resolved: {resolved_device})")
     if config.algorithm == 'slim':
         print(f"  P-inflate: {config.p_inflate}")
         print(f"  P-xo: {getattr(config, 'p_xo', 0.0)}")

@@ -149,15 +149,23 @@ def one_point_block_crossover(
     else:
         blocks = None
 
-    train_semantics = torch.stack(
-        [p1.train_semantics[i] for i in p1_idx] + [p2.train_semantics[i] for i in p2_idx]
+    target_device = (
+        p1.train_semantics.device
+        if isinstance(p1.train_semantics, torch.Tensor)
+        else (p2.train_semantics.device if isinstance(p2.train_semantics, torch.Tensor) else None)
     )
+
+    train_parts = [p1.train_semantics[i] for i in p1_idx] + [p2.train_semantics[i] for i in p2_idx]
+    if target_device is not None:
+        train_parts = [t.to(target_device) if t.device != target_device else t for t in train_parts]
+    train_semantics = torch.stack(train_parts)
 
     test_semantics: Optional[torch.Tensor]
     if p1.test_semantics is not None and p2.test_semantics is not None:
-        test_semantics = torch.stack(
-            [p1.test_semantics[i] for i in p1_idx] + [p2.test_semantics[i] for i in p2_idx]
-        )
+        test_parts = [p1.test_semantics[i] for i in p1_idx] + [p2.test_semantics[i] for i in p2_idx]
+        if target_device is not None:
+            test_parts = [t.to(target_device) if t.device != target_device else t for t in test_parts]
+        test_semantics = torch.stack(test_parts)
     else:
         test_semantics = None
 
@@ -227,21 +235,29 @@ def uniform_block_crossover(
     else:
         blocks = None
 
-    train_semantics = torch.stack(
-        [
-            (p1.train_semantics[i] if chosen_from_p1[i] else p2.train_semantics[i])
-            for i in range(target_size)
-        ]
+    target_device = (
+        p1.train_semantics.device
+        if isinstance(p1.train_semantics, torch.Tensor)
+        else (p2.train_semantics.device if isinstance(p2.train_semantics, torch.Tensor) else None)
     )
+
+    train_parts = [
+        (p1.train_semantics[i] if chosen_from_p1[i] else p2.train_semantics[i])
+        for i in range(target_size)
+    ]
+    if target_device is not None:
+        train_parts = [t.to(target_device) if t.device != target_device else t for t in train_parts]
+    train_semantics = torch.stack(train_parts)
 
     test_semantics: Optional[torch.Tensor]
     if p1.test_semantics is not None and p2.test_semantics is not None:
-        test_semantics = torch.stack(
-            [
-                (p1.test_semantics[i] if chosen_from_p1[i] else p2.test_semantics[i])
-                for i in range(target_size)
-            ]
-        )
+        test_parts = [
+            (p1.test_semantics[i] if chosen_from_p1[i] else p2.test_semantics[i])
+            for i in range(target_size)
+        ]
+        if target_device is not None:
+            test_parts = [t.to(target_device) if t.device != target_device else t for t in test_parts]
+        test_semantics = torch.stack(test_parts)
     else:
         test_semantics = None
 

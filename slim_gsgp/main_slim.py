@@ -178,6 +178,8 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
         warnings.warn("No dataset name set. Using default value of dataset_1.")
         dataset_name = "dataset_1"
 
+    data_device = X_train.device
+
     # If so, create the ms callable
     ms = generate_random_uniform(ms_lower, ms_upper)
 
@@ -224,7 +226,8 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
             if len(valid_functions) > 1 else valid_functions[0])
 
     try:
-        slim_gsgp_pi_init['CONSTANTS'] = {f"constant_{str(n).replace('-', '_')}": lambda _, num=n: torch.tensor(num)
+        slim_gsgp_pi_init['CONSTANTS'] = {
+            f"constant_{str(n).replace('-', '_')}": lambda _, num=n, dev=data_device: torch.tensor(num, device=dev)
                                           for n in tree_constants}
     except KeyError as e:
         valid_constants = list(CONSTANTS)

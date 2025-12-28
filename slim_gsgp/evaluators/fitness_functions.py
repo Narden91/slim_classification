@@ -42,6 +42,8 @@ def rmse(y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
     torch.Tensor
         RMSE value.
     """
+    if y_true.device != y_pred.device or y_true.dtype != y_pred.dtype:
+        y_true = y_true.to(device=y_pred.device, dtype=y_pred.dtype)
     return torch.sqrt(torch.mean(torch.square(torch.sub(y_true, y_pred)), dim=len(y_pred.shape) - 1))
 
 
@@ -61,6 +63,8 @@ def mse(y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
     torch.Tensor
         MSE value.
     """
+    if y_true.device != y_pred.device or y_true.dtype != y_pred.dtype:
+        y_true = y_true.to(device=y_pred.device, dtype=y_pred.dtype)
     return torch.mean(torch.square(torch.sub(y_true, y_pred)), dim=len(y_pred.shape) - 1)
 
 
@@ -80,6 +84,8 @@ def mae(y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
     torch.Tensor
         MAE value.
     """
+    if y_true.device != y_pred.device or y_true.dtype != y_pred.dtype:
+        y_true = y_true.to(device=y_pred.device, dtype=y_pred.dtype)
     return torch.mean(torch.abs(torch.sub(y_true, y_pred)), dim=len(y_pred.shape) - 1)
 
 

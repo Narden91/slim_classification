@@ -405,11 +405,28 @@ def inflate_mutation(FUNCTIONS: Dict,
             ),
             reconstruct=True,
         )
+
+        # Ensure stacked semantics live on the same device as the inputs.
+        # This is required for CUDA runs where some components may have been
+        # created on CPU (e.g., constants) and would otherwise trigger
+        # mixed-device errors during torch.stack.
+        train_device = X.device if isinstance(X, torch.Tensor) else None
+        if train_device is not None and isinstance(new_block.train_semantics, torch.Tensor):
+            if new_block.train_semantics.device != train_device:
+                new_block.train_semantics = new_block.train_semantics.to(train_device)
+
+        test_device = (
+            X_test.device if (X_test is not None and isinstance(X_test, torch.Tensor)) else None
+        )
+        if test_device is not None and isinstance(new_block.test_semantics, torch.Tensor):
+            if new_block.test_semantics.device != test_device:
+                new_block.test_semantics = new_block.test_semantics.to(test_device)
         # creating the offspring individual, by adding the new block to it
         offs = Individual(
             collection=individual.collection + [new_block] if reconstruct else None,
             train_semantics=torch.stack(
-                list(individual.train_semantics) + [
+                [t.to(train_device) if (train_device is not None and isinstance(t, torch.Tensor) and t.device != train_device) else t
+                 for t in list(individual.train_semantics)] + [
                     (
                         new_block.train_semantics
                         if new_block.train_semantics.shape != torch.Size([])
@@ -420,7 +437,8 @@ def inflate_mutation(FUNCTIONS: Dict,
             test_semantics=(
                 (
                     torch.stack(
-                        list(individual.test_semantics) + [
+                        [t.to(test_device) if (test_device is not None and isinstance(t, torch.Tensor) and t.device != test_device) else t
+                         for t in list(individual.test_semantics)] + [
                             (
                                 new_block.test_semantics
                                 if new_block.test_semantics.shape != torch.Size([])

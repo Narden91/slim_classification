@@ -26,7 +26,7 @@ This module provides typed configuration objects for classifier parameters,
 ensuring type safety and validation at construction time.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal, Optional
 
 from .validators import validate_threshold, validate_scaling_factor
@@ -78,6 +78,32 @@ class ClassifierConfig:
         """Validate configuration parameters after initialization."""
         validate_threshold(self.threshold)
         validate_scaling_factor(self.sigmoid_scale)
+    
+    def replace(self, **changes) -> 'ClassifierConfig':
+        """Create a new config with specified changes.
+        
+        This is a convenience method that wraps dataclasses.replace().
+        
+        Parameters
+        ----------
+        **changes
+            Fields to change and their new values.
+            
+        Returns
+        -------
+        ClassifierConfig
+            New config instance with modifications.
+            
+        Examples
+        --------
+        >>> config = ClassifierConfig(threshold=0.5)
+        >>> new_config = config.replace(threshold=0.6, sigmoid_scale=2.0)
+        >>> new_config.threshold
+        0.6
+        >>> config.threshold  # Original unchanged
+        0.5
+        """
+        return replace(self, **changes)
 
 
 @dataclass(frozen=True)
@@ -133,3 +159,29 @@ class TrainingConfig:
             raise ValueError(f"n_iter must be positive, got {self.n_iter}")
         if self.verbose < 0:
             raise ValueError(f"verbose must be non-negative, got {self.verbose}")
+    
+    def replace(self, **changes) -> 'TrainingConfig':
+        """Create a new config with specified changes.
+        
+        This is a convenience method that wraps dataclasses.replace().
+        
+        Parameters
+        ----------
+        **changes
+            Fields to change and their new values.
+            
+        Returns
+        -------
+        TrainingConfig
+            New config instance with modifications.
+            
+        Examples
+        --------
+        >>> config = TrainingConfig(pop_size=100)
+        >>> new_config = config.replace(pop_size=50, n_iter=20)
+        >>> new_config.pop_size
+        50
+        >>> config.pop_size  # Original unchanged
+        100
+        """
+        return replace(self, **changes)

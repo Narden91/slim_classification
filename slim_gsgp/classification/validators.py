@@ -27,7 +27,7 @@ and configuration parameters used in classification tasks.
 """
 
 import torch
-from typing import Optional
+from typing import Optional, Tuple
 
 from .exceptions import (
     InvalidLabelError,
@@ -201,7 +201,7 @@ def validate_matching_shapes(
     y: torch.Tensor,
     X_name: str = "X",
     y_name: str = "y"
-) -> tuple:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Validate that X and y have matching sample dimensions.
     

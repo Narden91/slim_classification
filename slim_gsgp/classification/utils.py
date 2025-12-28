@@ -28,7 +28,7 @@ classification tasks across GP, GSGP, and SLIM models.
 
 import logging
 import torch
-from typing import Callable
+from typing import Callable, Optional
 
 from .exceptions import FitnessRegistrationError
 from .validators import validate_scaling_factor
@@ -162,7 +162,7 @@ def binary_sign_transform(tensor: torch.Tensor) -> torch.Tensor:
 
 def create_binary_fitness_function(
     base_fitness_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    transform_func: Callable[[torch.Tensor], torch.Tensor] = None,
+    transform_func: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
     scaling_factor: float = 1.0
 ) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
     """

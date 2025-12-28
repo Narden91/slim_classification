@@ -250,20 +250,29 @@ def register_classification_fitness_functions() -> bool:
         from slim_gsgp.config.slim_config import fitness_function_options as slim_fitness
 
         # Import base fitness functions
-        from slim_gsgp.evaluators.fitness_functions import rmse, mse, mae
+        from slim_gsgp.evaluators.fitness_functions import (
+            rmse, mse, mae, auc_roc_score, matthews_correlation_coefficient
+        )
 
-        # Create binary versions of common fitness functions
+        # Create binary versions of common fitness functions with sigmoid transformation
         binary_rmse = create_binary_fitness_function(rmse)
         binary_mse = create_binary_fitness_function(mse)
         binary_mae = create_binary_fitness_function(mae)
+        
+        # AUC-ROC and MCC already work with probabilities/scores, wrap with sigmoid
+        binary_auc_roc = create_binary_fitness_function(auc_roc_score)
+        binary_mcc = create_binary_fitness_function(matthews_correlation_coefficient)
 
         # Register with each dictionary
         for fitness_dict in [gp_fitness, gsgp_fitness, slim_fitness]:
             fitness_dict['binary_rmse'] = binary_rmse
             fitness_dict['binary_mse'] = binary_mse
             fitness_dict['binary_mae'] = binary_mae
+            fitness_dict['binary_auc_roc'] = binary_auc_roc
+            fitness_dict['binary_mcc'] = binary_mcc
 
-        logger.info("Successfully registered binary classification fitness functions")
+        logger.info("Successfully registered binary classification fitness functions "
+                   "(binary_rmse, binary_mse, binary_mae, binary_auc_roc, binary_mcc)")
         return True
     except ImportError as e:
         error_msg = f"Could not register classification fitness functions: {str(e)}"

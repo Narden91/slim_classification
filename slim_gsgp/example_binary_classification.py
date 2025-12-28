@@ -141,6 +141,21 @@ def parse_arguments():
     parser.add_argument("--p-inflate", type=float, default=0.5,
                         help="Probability of inflate mutation for SLIM algorithm")
 
+    # SLIM crossover parameters
+    parser.add_argument(
+        "--p-xo",
+        type=float,
+        default=0.0,
+        help="SLIM crossover probability (0 disables crossover)",
+    )
+    parser.add_argument(
+        "--crossover-operator",
+        type=str,
+        default="one_point",
+        choices=["one_point", "uniform", "none"],
+        help="SLIM crossover operator to use when --p-xo > 0",
+    )
+
     # Checkpoint parameters
     parser.add_argument("--checkpoint-enabled", action="store_true", default=False,
                         help="Enable checkpointing to save and resume training")
@@ -205,6 +220,10 @@ def create_default_experiment_config():
 
         # SLIM specific parameters
         "p_inflate": 0.5,
+
+        # SLIM crossover parameters
+        "p_xo": 0.0,
+        "crossover_operator": "one_point",
         
         # Performance options
         "device": "auto",  # "auto", "cuda", or "cpu" - auto uses GPU if available
@@ -321,6 +340,8 @@ def setup_algorithm_params(args, dataset_name):
         # For SLIM, set appropriate version
         algo_params['slim_version'] = args.slim_version
         algo_params['p_inflate'] = args.p_inflate
+        algo_params['p_xo'] = getattr(args, 'p_xo', 0.0)
+        algo_params['crossover_operator'] = getattr(args, 'crossover_operator', 'one_point')
         algo_params['ms_lower'] = 0
         algo_params['ms_upper'] = 1
 
@@ -666,6 +687,8 @@ def run_experiment(config):
     print(f"  Max depth: {config.max_depth}")
     if config.algorithm == 'slim':
         print(f"  P-inflate: {config.p_inflate}")
+        print(f"  P-xo: {getattr(config, 'p_xo', 0.0)}")
+        print(f"  Crossover operator: {getattr(config, 'crossover_operator', 'one_point')}")
     print()
 
     # Train the classifier
@@ -731,6 +754,8 @@ def run_experiment(config):
     if config.algorithm == 'slim':
         additional_info['slim_version'] = config.slim_version
         additional_info['p_inflate'] = config.p_inflate
+        additional_info['p_xo'] = getattr(config, 'p_xo', 0.0)
+        additional_info['crossover_operator'] = getattr(config, 'crossover_operator', 'one_point')
 
     # Get algorithm identifier for directory creation
     algorithm_id = get_algorithm_identifier(config)

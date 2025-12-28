@@ -65,6 +65,8 @@ python slim_gsgp/example_binary_classification.py \
 
 ### SLIM-only
 - `--p-inflate` (float): inflate mutation probability
+- `--p-xo` (float): crossover probability (0 disables crossover)
+- `--crossover-operator` (`one_point|uniform|none`): crossover operator used when `--p-xo > 0`
 
 ### Output
 - `--verbose` (bool): pass `--verbose=True` or `--verbose=False`

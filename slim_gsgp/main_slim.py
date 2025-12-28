@@ -33,6 +33,10 @@ from slim_gsgp.utils.logger import log_settings
 from slim_gsgp.utils.utils import (get_terminals, check_slim_version, validate_inputs, generate_random_uniform,
                                    get_best_min, get_best_max, create_result_directory)
 from slim_gsgp.algorithms.SLIM_GSGP.operators.mutators import inflate_mutation
+from slim_gsgp.algorithms.SLIM_GSGP.operators.crossover_operators import (
+    one_point_block_crossover,
+    uniform_block_crossover,
+)
 from slim_gsgp.selection.selection_algorithms import tournament_selection_max, tournament_selection_min
 
 ELITES = {}
@@ -44,6 +48,8 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
          slim_version: str = "SLIM+SIG2",
          pop_size: int = slim_gsgp_parameters["pop_size"],
          n_iter: int = slim_gsgp_solve_parameters["n_iter"],
+         p_xo: float = slim_gsgp_parameters["p_xo"],
+         crossover_operator: str = "one_point",
          elitism: bool = slim_gsgp_solve_parameters["elitism"], n_elites: int = slim_gsgp_solve_parameters["n_elites"],
          init_depth: int = slim_gsgp_pi_init["init_depth"],
          ms_lower: float = 0, ms_upper: float = 1,
@@ -128,6 +134,10 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
         Tournament size to utilize during selection. Only applicable if using tournament selection. (Default is 2)
     test_elite : bool, optional
         Whether to test the elite individual on the test set after each generation.
+    p_xo : float, optional
+        Crossover probability. If > 0, a SLIM crossover operator must be selected.
+    crossover_operator : str, optional
+        Crossover operator to use when p_xo > 0. Options: "one_point", "uniform", "none".
 
 
     Returns
@@ -231,7 +241,30 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     slim_gsgp_parameters["two_trees"] = trees
     slim_gsgp_parameters["operator"] = op
 
+    # crossover configuration
+    if not isinstance(p_xo, (int, float)) or not 0 <= p_xo <= 1:
+        raise ValueError("p_xo must be a float in [0, 1]")
+
+    slim_gsgp_parameters["p_xo"] = float(p_xo)
     slim_gsgp_parameters["p_m"] = 1 - slim_gsgp_parameters["p_xo"]
+
+    crossover_operator_norm = (crossover_operator or "none").strip().lower()
+    if slim_gsgp_parameters["p_xo"] > 0:
+        if crossover_operator_norm == "one_point":
+            slim_gsgp_parameters["crossover"] = one_point_block_crossover
+        elif crossover_operator_norm == "uniform":
+            slim_gsgp_parameters["crossover"] = uniform_block_crossover
+        else:
+            raise ValueError(
+                "When p_xo > 0, crossover_operator must be one of: one_point, uniform"
+            )
+    else:
+        # p_xo == 0 -> crossover not used; allow any value including "none"
+        if crossover_operator_norm not in {"none", "one_point", "uniform"}:
+            raise ValueError(
+                "crossover_operator must be one of: one_point, uniform, none"
+            )
+
     slim_gsgp_parameters["pop_size"] = pop_size
     slim_gsgp_parameters["inflate_mutator"] = inflate_mutation(
         FUNCTIONS=slim_gsgp_pi_init["FUNCTIONS"],

@@ -312,6 +312,30 @@ class SLIM_GSGP:
         
         return offspring
 
+    def _crossover_offspring(
+        self,
+        parent1: Individual,
+        parent2: Individual,
+        *,
+        reconstruct: bool,
+        max_depth: Optional[int],
+    ) -> Individual:
+        """Generate a crossover offspring with validation/fallback.
+
+        The configured crossover operator is expected to return an `Individual`.
+        If the produced offspring violates depth constraints, we fall back to
+        copying the first parent.
+        """
+
+        offspring = self.crossover(parent1, parent2, reconstruct=reconstruct)
+
+        if max_depth is not None and getattr(offspring, "depth", 0) > max_depth:
+            if self.copy_parent:
+                return self._copy_individual(parent1, reconstruct)
+            return self.deflate_mutator(parent1, reconstruct=reconstruct)
+
+        return offspring
+
     def solve(
         self,
         X_train: Union[torch.Tensor, np.ndarray],
@@ -410,6 +434,9 @@ class SLIM_GSGP:
         # evaluating the initial population
         population.evaluate(ffunction, y=y_train, operator=self.operator, n_jobs=n_jobs)
 
+        # Expose the current population for downstream inspection even if n_iter == 0
+        self.population = population
+
         end = time.time()
 
         # setting up the elite(s)
@@ -456,9 +483,17 @@ class SLIM_GSGP:
 
                     p1, p2 = self.selector(population), self.selector(population)
                     while p1 == p2:
-                        # choosing parents
                         p1, p2 = self.selector(population), self.selector(population)
-                    pass  # future work on slim_gsgp implementations should invent crossover
+
+                    off1 = self._crossover_offspring(
+                        p1,
+                        p2,
+                        reconstruct=reconstruct,
+                        max_depth=max_depth,
+                    )
+
+                    # add crossover offspring
+                    offs_pop.append(off1)
                 else:
                     # so, mutation was selected. Now deflation or inflation is selected.
                     if random.random() < self.p_deflate:
@@ -519,6 +554,7 @@ class SLIM_GSGP:
 
                     # adding the new offspring to the offspring population
                     offs_pop.append(off1)
+
 
             # removing any excess individuals from the offspring population
             if len(offs_pop) > population.size:

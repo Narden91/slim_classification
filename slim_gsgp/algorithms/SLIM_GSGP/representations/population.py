@@ -174,8 +174,15 @@ class Population:
                     pred = torch.clamp(pred, -1e12, 1e12)
                     # Compute fitness
                     fitness = ffunction(y, pred)
-                    individual.fitness = fitness
-                    self.fit.append(fitness)
+
+                    # Ensure fitness is a plain Python float (works on CUDA and CPU)
+                    if isinstance(fitness, torch.Tensor):
+                        fitness_value = float(fitness.detach().cpu().item())
+                    else:
+                        fitness_value = float(fitness)
+
+                    individual.fitness = fitness_value
+                    self.fit.append(fitness_value)
         else:
             # Fall back to parallel evaluation for multi-threaded case
             self.fit = Parallel(n_jobs=n_jobs)(

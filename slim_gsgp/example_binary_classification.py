@@ -674,6 +674,9 @@ def run_experiment(config):
     requested_device = getattr(config, "device", "auto")
     if requested_device == "auto":
         resolved_device = "cuda" if torch.cuda.is_available() else "cpu"
+    elif requested_device == "cuda" and not torch.cuda.is_available():
+        print("Warning: --device=cuda requested but CUDA is not available; falling back to CPU.")
+        resolved_device = "cpu"
     else:
         resolved_device = requested_device
 

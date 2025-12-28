@@ -202,11 +202,19 @@ def create_binary_fitness_function(
     use_default_sigmoid = transform_func is None
     
     def binary_fitness(y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
-        # Ensure y_true is float type (single conversion)
+        # Ensure y_true is a float tensor on the same device as y_pred
+        target_device = y_pred.device if isinstance(y_pred, torch.Tensor) else None
+
         if not isinstance(y_true, torch.Tensor):
-            y_true = torch.tensor(y_true, dtype=torch.float32)
-        elif y_true.dtype != torch.float32:
-            y_true = y_true.float()
+            if target_device is not None:
+                y_true = torch.tensor(y_true, dtype=torch.float32, device=target_device)
+            else:
+                y_true = torch.tensor(y_true, dtype=torch.float32)
+        else:
+            if y_true.dtype != torch.float32:
+                y_true = y_true.float()
+            if target_device is not None and y_true.device != target_device:
+                y_true = y_true.to(target_device)
 
         # Apply transformation to prediction
         if use_default_sigmoid:

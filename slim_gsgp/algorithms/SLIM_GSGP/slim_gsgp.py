@@ -157,16 +157,17 @@ class SLIM_GSGP:
             The calculated diversity value.
         """
         with torch.no_grad():
+            # For logging, compute diversity on CPU to avoid mixed CPU/CUDA tensors
+            # (and to keep NumPy-based utilities compatible).
+            aggregates = []
             if self.operator == "sum":
-                semantics_stack = torch.stack([
-                    torch.sum(ind.train_semantics, dim=0) 
-                    for ind in population.population
-                ])
+                for ind in population.population:
+                    aggregates.append(torch.sum(ind.train_semantics, dim=0).detach().to("cpu"))
             else:  # operator == "prod"
-                semantics_stack = torch.stack([
-                    torch.prod(ind.train_semantics, dim=0) 
-                    for ind in population.population
-                ])
+                for ind in population.population:
+                    aggregates.append(torch.prod(ind.train_semantics, dim=0).detach().to("cpu"))
+
+            semantics_stack = torch.stack(aggregates)
         
         return float(gsgp_pop_div_from_vectors(semantics_stack))
 

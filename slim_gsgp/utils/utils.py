@@ -671,7 +671,7 @@ def _evaluate_slim_individual(individual, ffunction, y, testing=False, operator=
         operator = torch.prod
 
     if testing:
-        individual.test_fitness = ffunction(
+        test_fit = ffunction(
             y,
             torch.clamp(
                 operator(individual.test_semantics, dim=0),
@@ -680,8 +680,13 @@ def _evaluate_slim_individual(individual, ffunction, y, testing=False, operator=
             ),
         )
 
+        if isinstance(test_fit, torch.Tensor):
+            individual.test_fitness = float(test_fit.detach().cpu().item())
+        else:
+            individual.test_fitness = float(test_fit)
+
     else:
-        individual.fitness = ffunction(
+        fit = ffunction(
             y,
             torch.clamp(
                 operator(individual.train_semantics, dim=0),
@@ -690,15 +695,15 @@ def _evaluate_slim_individual(individual, ffunction, y, testing=False, operator=
             ),
         )
 
+        if isinstance(fit, torch.Tensor):
+            fit_value = float(fit.detach().cpu().item())
+        else:
+            fit_value = float(fit)
+
+        individual.fitness = fit_value
+
         # if testing is false, return the value so that training parallelization has effect
-        return ffunction(
-            y,
-            torch.clamp(
-                operator(individual.train_semantics, dim=0),
-                -1000000000000.0,
-                1000000000000.0,
-            ),
-        )
+        return fit_value
 
 
 def create_result_directory(root_dir, dataset, algorithm, result_type, strategy=None, experiment_name:str="results"):

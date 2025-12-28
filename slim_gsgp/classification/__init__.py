@@ -84,8 +84,9 @@ from .strategies import (
 )
 
 # Backward compatibility exports (deprecated)
+# Note: modified_sigmoid is deprecated and no longer exported.
+# Use apply_sigmoid() instead for better performance.
 from .utils import (
-    modified_sigmoid,  # Deprecated: use apply_sigmoid instead
     binary_threshold_transform,
     binary_sign_transform,
 )
@@ -142,8 +143,8 @@ __all__ = [
     'FitnessRegistrationError',
     'InvalidScalingFactorError',
     
-    # Deprecated (backward compatibility)
-    'modified_sigmoid',
+    # Backward compatibility transforms (binary_threshold_transform, binary_sign_transform)
+    # Note: modified_sigmoid has been removed (use apply_sigmoid instead)
     'binary_threshold_transform',
     'binary_sign_transform',
 ]

@@ -213,23 +213,12 @@ def save_metrics_to_csv(
         if key != 'confusion_matrix':
             metrics_data[key] = value
 
-    # Add confusion matrix elements for binary classification
-    # if 'confusion_matrix' in metrics:
-    #     cm = metrics['confusion_matrix']
-    #     if cm.shape == (2, 2):
-    #         metrics_data['cm_tn'] = int(cm[0, 0])
-    #         metrics_data['cm_fp'] = int(cm[0, 1])
-    #         metrics_data['cm_fn'] = int(cm[1, 0])
-    #         metrics_data['cm_tp'] = int(cm[1, 1])
-
     # Add additional info if provided
     if additional_info:
         for key, value in additional_info.items():
             metrics_data[key] = value
 
     # Write to CSV
-    file_exists = os.path.isfile(csv_path)
-
     with open(csv_path, 'w', newline='') as csvfile:
         fieldnames = list(metrics_data.keys())
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)

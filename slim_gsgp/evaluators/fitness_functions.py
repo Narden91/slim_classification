@@ -123,7 +123,7 @@ def signed_errors(y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
 
 def binary_cross_entropy(y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
     """
-    Compute Binary Cross-Entropy (BCE) loss.
+    Compute Binary Cross-Entropy (BCE) loss with numerical stability.
 
     Parameters
     ----------
@@ -136,5 +136,16 @@ def binary_cross_entropy(y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Te
     -------
     torch.Tensor
         BCE value.
+        
+    Notes
+    -----
+    Predictions are clamped to [1e-7, 1 - 1e-7] to prevent log(0) errors
+    and ensure numerical stability.
     """
-    return torch.mean(-y_true * torch.log(y_pred) - (1 - y_true) * torch.log(1 - y_pred), dim=len(y_pred.shape) - 1)
+    # Clamp predictions to prevent log(0) errors
+    eps = 1e-7
+    y_pred_clamped = torch.clamp(y_pred, eps, 1 - eps)
+    return torch.mean(
+        -y_true * torch.log(y_pred_clamped) - (1 - y_true) * torch.log(1 - y_pred_clamped),
+        dim=len(y_pred.shape) - 1
+    )

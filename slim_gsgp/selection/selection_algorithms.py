@@ -24,11 +24,66 @@ Selection operator implementation.
 """
 
 import random
+from typing import Callable
 
 import numpy as np
 
 
-def tournament_selection_min(pool_size):
+def _tournament_selection(pool_size: int, maximize: bool) -> Callable:
+    """
+    Generic tournament selection factory function.
+    
+    Parameters
+    ----------
+    pool_size : int
+        Number of individuals participating in the tournament.
+    maximize : bool
+        If True, selects individual with highest fitness.
+        If False, selects individual with lowest fitness.
+        
+    Returns
+    -------
+    Callable
+        A tournament selection function.
+        
+    Notes
+    -----
+    This is a DRY implementation that both tournament_selection_min 
+    and tournament_selection_max delegate to.
+    """
+    selector_func = np.argmax if maximize else np.argmin
+    
+    def ts(pop):
+        """
+        Selects an individual from a randomly chosen pool based on fitness.
+
+        Parameters
+        ----------
+        pop : Population
+            The population from which individuals are drawn.
+
+        Returns
+        -------
+        Individual
+            The selected individual from the tournament.
+        """
+        # Use pre-computed fitness array for faster selection
+        pop_size = len(pop.population)
+        indices = random.sample(range(pop_size), k=min(pool_size, pop_size))
+        
+        # Use pop.fit if available, otherwise fall back to individual attributes
+        if pop.fit is not None:
+            pool_fitness = [pop.fit[i] for i in indices]
+        else:
+            pool_fitness = [pop.population[i].fitness for i in indices]
+        
+        winner_idx = indices[selector_func(pool_fitness)]
+        return pop.population[winner_idx]
+
+    return ts
+
+
+def tournament_selection_min(pool_size: int) -> Callable:
     """
     Returns a function that performs tournament selection to select an individual with the lowest fitness from a
     population.
@@ -52,43 +107,21 @@ def tournament_selection_min(pool_size):
         -------
         Individual
             The individual with the lowest fitness in the pool.
+            
     Notes
     -----
     The returned function performs tournament selection by receiving a population and returning the best of {pool_size}
     randomly selected individuals.
+    
+    Examples
+    --------
+    >>> selector = tournament_selection_min(pool_size=5)
+    >>> winner = selector(population)
     """
-
-    def ts(pop):
-        """
-        Selects the individual with the lowest fitness from a randomly chosen pool.
-
-        Parameters
-        ----------
-        pop : Population
-            The population from which individuals are drawn.
-
-        Returns
-        -------
-        Individual
-            The individual with the lowest fitness in the pool.
-        """
-        # Use pre-computed fitness array for faster selection
-        pop_size = len(pop.population)
-        indices = random.sample(range(pop_size), k=min(pool_size, pop_size))
-        
-        # Use pop.fit if available, otherwise fall back to individual attributes
-        if pop.fit is not None:
-            pool_fitness = [pop.fit[i] for i in indices]
-        else:
-            pool_fitness = [pop.population[i].fitness for i in indices]
-        
-        winner_idx = indices[np.argmin(pool_fitness)]
-        return pop.population[winner_idx]
-
-    return ts
+    return _tournament_selection(pool_size, maximize=False)
 
 
-def tournament_selection_max(pool_size):
+def tournament_selection_max(pool_size: int) -> Callable:
     """
     Returns a function that performs tournament selection to select an individual with the highest fitness from a
     population.
@@ -112,37 +145,15 @@ def tournament_selection_max(pool_size):
         -------
         Individual
             The individual with the highest fitness in the pool.
+            
     Notes
     -----
     The returned function performs tournament selection by receiving a population and returning the best of {pool_size}
     randomly selected individuals.
+    
+    Examples
+    --------
+    >>> selector = tournament_selection_max(pool_size=5)
+    >>> winner = selector(population)
     """
-    def ts(pop):
-        """
-        Selects the individual with the highest fitness from a randomly chosen pool.
-
-        Parameters
-        ----------
-        pop : Population
-            The population from which individuals are drawn.
-
-        Returns
-        -------
-        Individual
-            The individual with the highest fitness in the pool.
-        """
-        # Use pre-computed fitness array for faster selection
-        pop_size = len(pop.population)
-        indices = random.sample(range(pop_size), k=min(pool_size, pop_size))
-        
-        # Use pop.fit if available, otherwise fall back to individual attributes
-        if pop.fit is not None:
-            pool_fitness = [pop.fit[i] for i in indices]
-        else:
-            pool_fitness = [pop.population[i].fitness for i in indices]
-        
-        winner_idx = indices[np.argmax(pool_fitness)]
-        return pop.population[winner_idx]
-
-    return ts
-
+    return _tournament_selection(pool_size, maximize=True)

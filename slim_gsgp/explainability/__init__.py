@@ -26,6 +26,7 @@ Provides tools for exporting and visualizing SLIM models, including:
 - Formula export (text)
 - Interactive tree visualization (HTML)
 - Static tree visualization (SVG, PDF)
+- Feature importance extraction (frequency, depth-weighted, permutation)
 
 Cross-platform: Works on Windows and Linux without external binaries.
 Uses Plotly for modern, interactive visualizations.
@@ -33,8 +34,10 @@ Uses Plotly for modern, interactive visualizations.
 
 from slim_gsgp.explainability.formula_formatter import FormulaFormatter
 from slim_gsgp.explainability.tree_exporter import TreeExporter
+from slim_gsgp.explainability.feature_importance import FeatureImportanceExtractor
 
 __all__ = [
     "FormulaFormatter",
     "TreeExporter",
+    "FeatureImportanceExtractor",
 ]

@@ -1,0 +1,88 @@
+# COMMANDS
+
+Concise CLI reference for running `slim_gsgp/example_binary_classification.py`.
+
+## Quick start
+
+```bash
+# GP
+python slim_gsgp/example_binary_classification.py --dataset=breast_cancer --algorithm=gp
+
+# GSGP
+python slim_gsgp/example_binary_classification.py --dataset=breast_cancer --algorithm=gsgp
+
+# SLIM (choose a version)
+python slim_gsgp/example_binary_classification.py --dataset=breast_cancer --algorithm=slim --slim-version=SLIM+SIG2
+```
+
+## Feature importance
+
+```bash
+# Fast (frequency only)
+python slim_gsgp/example_binary_classification.py \
+  --dataset=breast_cancer --algorithm=slim --slim-version=SLIM+SIG2 \
+  --n-iter=50 --pop-size=100 \
+  --feature-importance --importance-method=frequency --importance-top-n=10
+
+# Full (frequency + depth + permutation)
+python slim_gsgp/example_binary_classification.py \
+  --dataset=breast_cancer --algorithm=gsgp \
+  --n-iter=50 --pop-size=100 \
+  --feature-importance --importance-method=all --importance-top-n=10 --importance-n-repeats=10
+```
+
+## Tree export
+
+```bash
+python slim_gsgp/example_binary_classification.py \
+  --dataset=breast_cancer --algorithm=gp \
+  --export-tree --export-format=all
+```
+
+## Arguments (compact)
+
+### Selection
+- `--dataset` (str): dataset name (e.g. `breast_cancer`, `eeg`, ...)
+- `--algorithm` (`gp|gsgp|slim`)
+- `--slim-version` (SLIM only): `SLIM+SIG2|SLIM*SIG2|SLIM+ABS|SLIM*ABS|SLIM+SIG1|SLIM*SIG1`
+
+### Training
+- `--pop-size` (int): population size
+- `--n-iter` (int): generations
+- `--max-depth` (int or `None`): depth cap (use `--max-depth=None` to disable)
+- `--seed` (int)
+
+### Classification
+- `--fitness-function` (str): `binary_rmse|binary_mse|binary_mae|binary_auc_roc|binary_mcc`
+- `--use-sigmoid` (bool): pass `--use-sigmoid=True` or `--use-sigmoid=False`
+- `--sigmoid-scale` (float)
+
+### Feature importance
+- `--feature-importance` (flag)
+- `--importance-method` (`frequency|depth|permutation|all`)
+- `--importance-top-n` (int)
+- `--importance-n-repeats` (int): permutation repeats (higher = slower, more stable)
+
+### SLIM-only
+- `--p-inflate` (float): inflate mutation probability
+
+### Output
+- `--verbose` (bool): pass `--verbose=True` or `--verbose=False`
+- `--save-visualization` (bool): pass `--save-visualization=True` or `--save-visualization=False`
+
+### Export (explainability)
+- `--export-tree` (flag)
+- `--export-format` (`html|svg|pdf|text|all`)
+- `--export-path` (str)
+
+### Checkpointing
+- `--checkpoint-enabled` (flag)
+- `--checkpoint-freq` (int)
+- `--checkpoint-path` (str)
+- `--resume` (flag)
+- `--no-clean-checkpoint` (flag)
+
+### Experiment registry
+- `--registry-path` (str)
+- `--experiment-id` (str)
+- `--force-registry` (flag)

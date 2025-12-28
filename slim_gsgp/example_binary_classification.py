@@ -161,6 +161,17 @@ def parse_arguments():
     parser.add_argument("--force-registry", action="store_true", default=False,
                         help="Force execution even if the registry marks the run as completed or running")
 
+    # Feature importance extraction
+    parser.add_argument("--feature-importance", action="store_true", default=False,
+                        help="Extract and display feature importance from the best individual")
+    parser.add_argument("--importance-method", type=str, default="all",
+                        choices=["frequency", "depth", "permutation", "all"],
+                        help="Feature importance method: frequency (fast), depth (fast), permutation (accurate), or all")
+    parser.add_argument("--importance-top-n", type=int, default=10,
+                        help="Number of top important features to display")
+    parser.add_argument("--importance-n-repeats", type=int, default=10,
+                        help="Number of permutation repeats for permutation importance (higher = more accurate but slower)")
+
     return parser.parse_args()
 
 
@@ -209,6 +220,12 @@ def create_default_experiment_config():
         "registry_path": None,
         "experiment_id": None,
         "force_registry": False,
+        
+        # Feature importance
+        "feature_importance": False,
+        "importance_method": "all",
+        "importance_top_n": 10,
+        "importance_n_repeats": 10,
     }
 
 
@@ -400,6 +417,125 @@ def create_visualization(model, args, root_dir, seed, verbose=True):
         if verbose:
             print(f"Could not visualize the model: {str(e)}")
         return None
+
+
+def extract_and_display_feature_importance(model, X_test, y_test, config, dataset_name):
+    """
+    Extract and display feature importance from the best individual.
+    
+    Parameters
+    ----------
+    model : BinaryClassifier
+        Trained classification model
+    X_test : torch.Tensor
+        Test input data
+    y_test : torch.Tensor
+        Test target data
+    config : argparse.Namespace
+        Configuration object with feature importance settings
+    dataset_name : str
+        Name of the dataset
+    """
+    try:
+        from slim_gsgp.explainability import FeatureImportanceExtractor
+        from slim_gsgp.evaluators.fitness_functions import binary_cross_entropy
+        
+        print("\n" + "=" * 70)
+        print("FEATURE IMPORTANCE ANALYSIS")
+        print("=" * 70)
+        
+        # Get the best individual (tree) from the underlying model
+        # The model could be a GP/GSGP/SLIM instance or directly a Tree
+        if hasattr(model.model, 'elite'):
+            # It's a GP/GSGP/SLIM instance
+            best_tree = model.model.elite
+        else:
+            # It's already a Tree object
+            best_tree = model.model
+        
+        n_features = X_test.shape[1]
+        
+        print(f"\nBest tree depth: {best_tree.depth}")
+        
+        # node_count may not exist for all tree types (e.g., SLIM Individual objects)
+        if hasattr(best_tree, 'node_count'):
+            print(f"Best tree nodes: {best_tree.node_count}")
+        
+        if hasattr(best_tree, 'fitness'):
+            print(f"Train fitness: {best_tree.fitness:.4f}")
+        
+        if hasattr(best_tree, 'test_fitness') and best_tree.test_fitness:
+            print(f"Test fitness: {best_tree.test_fitness:.4f}")
+        
+        # Create feature importance extractor
+        extractor = FeatureImportanceExtractor(n_features=n_features)
+        
+        # Determine which methods to run
+        methods = []
+        if config.importance_method == "all":
+            methods = ["frequency", "depth", "permutation"]
+        else:
+            methods = [config.importance_method]
+        
+        # Dictionary to store results
+        importance_results = {}
+        
+        # Run each method
+        for method in methods:
+            if method == "frequency":
+                print("\nMethod: Frequency-Based (Fast)")
+                print("  Counts how many times each feature appears in the tree")
+                importance = extractor.frequency_importance(best_tree, normalize=True)
+                importance_results['frequency'] = importance
+                
+            elif method == "depth":
+                print("\nMethod: Depth-Weighted (Fast)")
+                print("  Features closer to root have higher importance")
+                importance = extractor.depth_weighted_importance(best_tree, normalize=True)
+                importance_results['depth'] = importance
+                
+            elif method == "permutation":
+                print("\nMethod: Permutation-Based (Accurate)")
+                print(f"  Measures performance degradation when features are shuffled")
+                print(f"  Using {config.importance_n_repeats} permutation repeats...")
+                importance = extractor.permutation_importance(
+                    best_tree, X_test, y_test, binary_cross_entropy,
+                    n_repeats=config.importance_n_repeats,
+                    normalize=True
+                )
+                importance_results['permutation'] = importance
+        
+        # Display results
+        print("\n" + "-" * 70)
+        print(f"Top {config.importance_top_n} Most Important Features:")
+        print("-" * 70)
+        
+        for method_name, importance in importance_results.items():
+            top_features = extractor.get_top_features(importance, n=config.importance_top_n)
+            
+            print(f"\n{method_name.upper()}:")
+            print(f"  {'Feature':<12} {'Score':<10} {'Percentage':<12}")
+            print(f"  {'-'*40}")
+            
+            for feat, score, _ in top_features:
+                print(f"  {feat:<12} {score:<10.4f} {score*100:<10.1f}%")
+        
+        # Summary statistics
+        features_used = sum(1 for s in importance_results[methods[0]].values() if s > 0)
+        print(f"\n{'-'*70}")
+        print("Summary:")
+        print(f"  Total features in dataset: {n_features}")
+        print(f"  Features used in best tree: {features_used}")
+        print(f"  Feature utilization: {features_used / n_features * 100:.1f}%")
+        print("=" * 70)
+        
+    except ImportError:
+        print("\nWarning: Feature importance module not available.")
+        print("Install the explainability module to use this feature.")
+    except Exception as e:
+        print(f"\nWarning: Failed to extract feature importance: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 
 def export_tree_and_formula(model, config, root_dir, algorithm_id, verbose=True):
@@ -700,6 +836,16 @@ def run_experiment(config):
             root_dir=root_dir,
             algorithm_id=algorithm_id,
             verbose=True
+        )
+
+    # Extract and display feature importance if requested
+    if getattr(config, 'feature_importance', False):
+        extract_and_display_feature_importance(
+            model=model,
+            X_test=X_test,
+            y_test=y_test,
+            config=config,
+            dataset_name=config.dataset
         )
 
     return test_metrics, training_time, metrics_path, vis_path, model

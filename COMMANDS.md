@@ -51,6 +51,7 @@ python slim_gsgp/example_binary_classification.py \
 - `--n-iter` (int): generations
 - `--max-depth` (int or `None`): depth cap (use `--max-depth=None` to disable)
 - `--seed` (int)
+- `--device` (`auto|cpu|cuda`): tensor device selection
 
 ### Classification
 - `--fitness-function` (str): `binary_rmse|binary_mse|binary_mae|binary_auc_roc|binary_mcc`

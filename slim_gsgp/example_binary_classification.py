@@ -710,8 +710,8 @@ def run_experiment(config):
         # if some environments import config modules differently.
         pass
 
-    # Register binary fitness functions
-    # register_classification_fitness_functions()
+    # Note: Binary fitness functions (binary_rmse, binary_mse, etc.) are automatically
+    # registered at module import via slim_gsgp.classification.__init__.py
 
     # Load and split the dataset
     X_train, X_val, X_test, y_train, y_val, y_test, n_classes, class_labels = load_and_split_dataset(

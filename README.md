@@ -198,8 +198,7 @@ ad-hoc experiments gain the same resume guarantees.
 * `p_inflate`: A float specifying the probability to apply the inflate mutation *(default: 0.2)*.
 * `reconstruct`: A bool specifying whether to store the structure of individuals. More computationally expensive, but allows usage outside the algorithm *(default: False)*.
 *  `copy_parent`: A bool representing whether to copy the original parent when mutation is impossible (due to depth rules or mutation constraints). *(default: True)*.
-*  `copy_parent`: A bool representing whether to copy the original parent when mutation is impossible (due to depth rules or mutation constraints). *(default: True)*.
-*  
+
 
 ## Additional Notes
 

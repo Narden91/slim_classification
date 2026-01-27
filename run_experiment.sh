@@ -14,6 +14,25 @@ NUM_RUNS=30
 # Set the base seed (each run will use base_seed + run_index)
 BASE_SEED=42
 
+#Blood 
+#Clima 
+#Eeg 
+#Fertility 
+#Gina 
+#Hill 
+#Ilpd 
+#Kc 
+#Liver 
+#Musk 
+#Ozone 
+#Pc1 
+#Pc3 
+#Qsar 
+#Retinopathy 
+#Scene 
+#Spam 
+#Spect 
+
 # Define the datasets to process
 DATASETS=("gina" "eeg" "scene" "fertility" "liver" "ozone") # ("gina" "eeg" "scene" "fertility" "liver" "ozone")
 

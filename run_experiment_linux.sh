@@ -16,7 +16,7 @@ fi
 SCRIPT_PATH="slim_gsgp/example_binary_classification.py"
 
 # Set the number of runs per dataset
-NUM_RUNS=1
+NUM_RUNS=20
 
 # Set the base seed (each run will use base_seed + run_index)
 BASE_SEED=42

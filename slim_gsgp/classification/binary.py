@@ -48,9 +48,7 @@ from .strategies import (
     get_strategy,
 )
 from .factories import AlgorithmFactory, get_default_factory
-
-if TYPE_CHECKING:
-    from .config import ClassifierConfig, TrainingConfig
+from .config import ClassifierConfig, TrainingConfig
 
 logger = logging.getLogger(__name__)
 

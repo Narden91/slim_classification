@@ -12,4 +12,6 @@ slim_gsgp.egg-info/*
 *.csv
 results/*
 slim_gsgp/wandb/*
-
+venv_slim/
+logs/slurm/*
+logs*

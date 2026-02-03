@@ -343,7 +343,7 @@ def setup_algorithm_params(args, dataset_name):
     algorithm_id = get_algorithm_identifier(args)
     results_dir = os.path.join(get_project_root(), "results", dataset_name, algorithm_id)
     if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
 
     # Add algorithm-specific parameters
     if args.algorithm == 'gsgp':
@@ -825,7 +825,7 @@ def run_experiment(config):
     # Create results directory
     results_dir = os.path.join(root_dir, "results", config.dataset, algorithm_id)
     if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
 
     metrics_path = os.path.join(results_dir, "metrics.csv")
     settings_path = os.path.join(results_dir, "settings.csv")

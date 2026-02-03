@@ -732,12 +732,12 @@ def create_result_directory(root_dir, dataset, algorithm, result_type, strategy=
     # Create base results directory
     results_dir = os.path.join(root_dir, experiment_name)
     if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
 
     # Create dataset directory
     dataset_dir = os.path.join(results_dir, dataset)
     if not os.path.exists(dataset_dir):
-        os.makedirs(dataset_dir)
+        os.makedirs(dataset_dir, exist_ok=True)
 
     # Create algorithm directory
     if strategy:
@@ -746,11 +746,11 @@ def create_result_directory(root_dir, dataset, algorithm, result_type, strategy=
         algorithm_dir = os.path.join(dataset_dir, algorithm)
 
     if not os.path.exists(algorithm_dir):
-        os.makedirs(algorithm_dir)
+        os.makedirs(algorithm_dir, exist_ok=True)
 
     # Create result type directory
     result_dir = os.path.join(algorithm_dir, result_type)
     if not os.path.exists(result_dir):
-        os.makedirs(result_dir)
+        os.makedirs(result_dir, exist_ok=True)
 
     return result_dir

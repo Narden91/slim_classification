@@ -49,7 +49,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-from slim_gsgp.utils.utils import train_test_split, create_result_directory
+from slim_gsgp.utils.utils import train_test_split, stratified_train_test_split, create_result_directory
 from slim_gsgp.datasets.data_loader import load_classification_dataset, load_classification_benchmark_dataset
 from slim_gsgp.classification import (
     train_binary_classifier,
@@ -300,8 +300,8 @@ def load_and_split_dataset(dataset_name, seed):
             f"This example is for binary classification only. Dataset {dataset_name} has {n_classes} classes.")
 
     # Split the data into train, validation, and test sets
-    X_train, X_temp, y_train, y_temp = train_test_split(X, y, p_test=0.3, seed=seed)
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, p_test=0.5, seed=seed)
+    X_train, X_temp, y_train, y_temp = stratified_train_test_split(X, y, p_test=0.3, seed=seed)
+    X_val, X_test, y_val, y_test = stratified_train_test_split(X_temp, y_temp, p_test=0.5, seed=seed)
 
     print(f"Train set size: {len(X_train)}")
     print(f"Validation set size: {len(X_val)}")

@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='slim_gsgp',
-    version='0.1.10',
+    version='0.2.10',
     packages=find_packages(),
     include_package_data=True,
     install_requires=[

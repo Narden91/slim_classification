@@ -127,6 +127,83 @@ def train_test_split(X, y, p_test=0.3, shuffle=True, indices_only=False, seed=0)
         return X_train, X_test, y_train, y_test
 
 
+def stratified_train_test_split(X, y, p_test=0.3, shuffle=True, seed=0):
+    """Splits X and y tensors into train and test subsets while preserving class proportions.
+
+    This method performs stratified splitting, ensuring that each split maintains
+    the same class distribution as the original dataset. This is critical for
+    imbalanced classification datasets where random splitting can leave minority
+    class samples absent from one of the splits.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        Input data instances.
+    y : torch.Tensor
+        Target vector with integer class labels.
+    p_test : float (default=0.3)
+        The proportion of the dataset to include in the test split.
+    shuffle : bool (default=True)
+        Whether to shuffle the data before splitting.
+    seed : int (default=0)
+        The seed for random number generators.
+
+    Returns
+    -------
+    X_train : torch.Tensor
+        Training data instances.
+    X_test : torch.Tensor
+        Test data instances.
+    y_train : torch.Tensor
+        Training target vector.
+    y_test : torch.Tensor
+        Test target vector.
+    """
+    torch.manual_seed(seed)
+
+    # Get unique classes
+    classes = torch.unique(y)
+
+    train_indices = []
+    test_indices = []
+
+    for cls in classes:
+        # Get indices for this class
+        cls_indices = torch.where(y == cls)[0]
+
+        # Shuffle class indices if requested
+        if shuffle:
+            perm = torch.randperm(len(cls_indices))
+            cls_indices = cls_indices[perm]
+
+        # Split this class proportionally
+        n_test = max(1, int(math.floor(p_test * len(cls_indices))))
+
+        # Ensure at least 1 sample remains for train as well
+        if n_test >= len(cls_indices):
+            n_test = len(cls_indices) - 1
+            if n_test < 1:
+                n_test = 1
+
+        test_indices.append(cls_indices[:n_test])
+        train_indices.append(cls_indices[n_test:])
+
+    # Concatenate all class indices
+    train_indices = torch.cat(train_indices)
+    test_indices = torch.cat(test_indices)
+
+    # Shuffle the combined indices so classes are interleaved
+    if shuffle:
+        train_perm = torch.randperm(len(train_indices))
+        test_perm = torch.randperm(len(test_indices))
+        train_indices = train_indices[train_perm]
+        test_indices = test_indices[test_perm]
+
+    X_train, X_test = X[train_indices], X[test_indices]
+    y_train, y_test = y[train_indices], y[test_indices]
+    return X_train, X_test, y_train, y_test
+
+
 def tensor_dimensioned_sum(dim):
     """
     Generate a sum function over a specified dimension.

@@ -15,3 +15,4 @@ slim_gsgp/wandb/*
 venv_slim/
 logs/slurm/*
 logs*
+.agent/

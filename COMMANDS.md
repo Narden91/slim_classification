@@ -39,6 +39,44 @@ python slim_gsgp/example_binary_classification.py \
   --export-tree --export-format=all
 ```
 
+## CINECA launch scripts
+
+### Flexible launcher (recommended)
+
+```bash
+# Make executable once
+chmod +x launch_cineca_flexible.sh
+
+# Launch all task configurations from config/task_list.csv
+./launch_cineca_flexible.sh --all
+
+# Launch an inclusive task-id interval
+./launch_cineca_flexible.sh --from 250 --to 1272
+
+# Launch exactly 1023 tasks from the beginning (0..1022)
+./launch_cineca_flexible.sh --count 1023
+
+# Launch exactly 1023 tasks starting from a custom index
+./launch_cineca_flexible.sh --from 500 --count 1023
+```
+
+Notes:
+- Tasks are always submitted in array batches of 50.
+- If total tasks is not a multiple of 50, the last batch is partial.
+- Scripts used: `launch_cineca_flexible.sh` + `run_experiments_cineca_flexible.slurm`.
+
+### Fixed block launcher (legacy)
+
+```bash
+# Launch a selected interval where size is a multiple of 50
+./launch_cineca_block50.sh --from 0 --to 249
+./launch_cineca_block50.sh --from 250 --to 499
+```
+
+Notes:
+- This launcher enforces interval size as a multiple of 50.
+- Scripts used: `launch_cineca_block50.sh` + `run_experiments_cineca_block50.slurm`.
+
 ## Arguments (compact)
 
 ### Selection

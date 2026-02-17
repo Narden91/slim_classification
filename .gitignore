@@ -16,4 +16,7 @@ venv_slim/
 logs/slurm/*
 logs*
 .agent/
+venv/*
+env/
+venv_slim/*
 results.tar.gz

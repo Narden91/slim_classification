@@ -91,6 +91,8 @@ def flatten_tree(tree_repr: Union[tuple, str, list, Any]) -> List[Any]:
         return [tree_repr]
 
 
+import numpy as np
+
 def extract_features(tree_repr: Union[tuple, str, list, Any]) -> List[str]:
     """
     Extract all feature names (terminals starting with 'x') from a tree.
@@ -111,7 +113,15 @@ def extract_features(tree_repr: Union[tuple, str, list, Any]) -> List[str]:
     ['x0', 'x1', 'x2']
     """
     nodes = flatten_tree(tree_repr)
-    return [node for node in nodes if isinstance(node, str) and node.startswith('x')]
+    # Robust check: convert to string and check prefix
+    features = []
+    for node in nodes:
+        s_node = str(node)
+        # Check if it looks like a feature (starts with x followed by digit)
+        if s_node.startswith('x') and len(s_node) > 1 and s_node[1].isdigit():
+             features.append(s_node)
+    
+    return features
 
 
 def count_feature_occurrences(tree_repr: Union[tuple, str, list, Any]) -> Dict[str, int]:

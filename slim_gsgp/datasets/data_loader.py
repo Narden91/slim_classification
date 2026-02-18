@@ -810,6 +810,105 @@ def load_ppb(X_y=True):
         return df
 
 
+def load_darwin(X_y=True):
+    """
+    Loads and returns the DARWIN data set (classification).
+    
+    The ID column is removed.
+    
+    Parameters
+    ----------
+    X_y : bool, optional
+        Indicates if the data is to be returned as two objects of type torch.Tensor, otherwise as single Tensor.
+
+    Returns
+    -------
+    X, y : torch.Tensor, torch.Tensor
+        The input data (X) and the target of the prediction (y).
+    df : pandas.DataFrame
+        An object of type pandas.DataFrame which holds the data.
+    """
+    df = pd.read_csv(
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "data", "DARWIN.csv")
+    )
+    
+    # Drop ID column if it exists (assuming it's the first column or named 'ID')
+    if 'ID' in df.columns:
+        df = df.drop(columns=['ID'])
+    
+    # Assuming 'class' is the target and it is the last column
+    
+    if X_y:
+        # Convert class to numeric if it's not already (e.g., P/H to 1/0)
+        # Check if target column is numeric
+        if df.iloc[:, -1].dtype == 'object':
+             df.iloc[:, -1] = pd.factorize(df.iloc[:, -1])[0]
+
+        return (
+            torch.from_numpy(df.values[:, :-1].astype(float)).float(),
+            torch.from_numpy(df.values[:, -1].astype(float)).float(),
+        )
+    else:
+        return df
+
+
+def load_hand_stat(X_y=True):
+    """
+    Loads and returns the HAND_STAT data set (classification).
+    
+    Performs One-Hot Encoding on categorical variables: Sex, Work, Education.
+    
+    Parameters
+    ----------
+    X_y : bool, optional
+        Indicates if the data is to be returned as two objects of type torch.Tensor, otherwise as single Tensor.
+
+    Returns
+    -------
+    X, y : torch.Tensor, torch.Tensor
+        The input data (X) and the target of the prediction (y).
+    df : pandas.DataFrame
+        An object of type pandas.DataFrame which holds the data.
+    """
+    df = pd.read_csv(
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "data", "HAND_STAT.csv")
+    )
+    
+    # Drop ID column if it exists
+    if 'ID' in df.columns:
+        df = df.drop(columns=['ID'])
+        
+    # Identification of Categorical Columns to One-Hot Encode
+    categorical_cols = ['Sex', 'Work', 'Education']
+    
+    # Ensure they exist before encoding
+    existing_cat_cols = [col for col in categorical_cols if col in df.columns]
+    
+    if existing_cat_cols:
+        df = pd.get_dummies(df, columns=existing_cat_cols, drop_first=False)
+        
+    # Move 'Label' (target) to the end if it's not
+    if 'Label' in df.columns:
+        target = df.pop('Label')
+        df['Label'] = target
+        
+    if X_y:
+         # Convert class to numeric if it's not already
+        if df.iloc[:, -1].dtype == 'object':
+             df.iloc[:, -1] = pd.factorize(df.iloc[:, -1])[0]
+             
+        # Ensure all data is float for tensor conversion
+        # Boolean columns from get_dummies need to be converted to float
+        df = df.astype(float)
+
+        return (
+            torch.from_numpy(df.values[:, :-1]).float(),
+            torch.from_numpy(df.values[:, -1]).float(),
+        )
+    else:
+        return df
+
+
 def load_bioav(X_y=True):
     """Loads and returns the Oral Bioavailability data set (regression)
 

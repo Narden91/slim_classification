@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SLURM_SCRIPT="run_experiments_cineca_flexible.slurm"
-TASK_LIST="config/task_list.csv"
-BENCH_DIR="slim_gsgp/datasets/benchmark"
-PYTHON_SCRIPT="slim_gsgp/example_binary_classification.py"
-VENV_ACTIVATE="venv_slim/bin/activate"
+SLURM_SCRIPT="${SLURM_SCRIPT:-run_experiments_cineca_flexible.slurm}"
+TASK_LIST="${TASK_LIST:-config/task_list.csv}"
+BENCH_DIR="${BENCH_DIR:-slim_gsgp/datasets/benchmark}"
+PYTHON_SCRIPT="${PYTHON_SCRIPT:-slim_gsgp/example_binary_classification.py}"
+VENV_ACTIVATE="${VENV_ACTIVATE:-venv_slim/bin/activate}"
 
 FROM_TASK=""
 TO_TASK=""

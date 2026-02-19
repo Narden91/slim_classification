@@ -111,7 +111,44 @@ if __name__ == "__main__":
     parser.add_argument("--pop_size", type=int, default=100, help="Population Size")
     parser.add_argument("--n_iter", type=int, default=100, help="Number of Generations")
     
+    # SLURM Compatibility Arguments (Ignored or Validated)
+    parser.add_argument("--dataset", type=str, help="Dataset name (ignored)")
+    parser.add_argument("--algorithm", type=str, help="Algorithm name (ignored)")
+    parser.add_argument("--slim-version", type=str, help="SLIM version (ignored)")
+    parser.add_argument("--max-depth", type=str, help="Max depth (ignored)")
+    parser.add_argument("--p-inflate", type=float, help="P inflate (ignored if running full ablation)")
+    parser.add_argument("--sigmoid-scale", type=float, help="Sigmoid scale (ignored)")
+    parser.add_argument("--seed", type=int, help="Seed (mapped to run_id if run_id is default)")
+    
+    parser.add_argument("--dry-run", action="store_true", help="Perform a dry run to check setup")
+
     args = parser.parse_args()
+    
+    # Map seed to run_id if provided and run_id is default
+    if args.seed is not None and args.run_id == 0:
+        args.run_id = args.seed
+
+    if args.dry_run:
+        print(f"[{os.path.basename(__file__)}] Performing DRY RUN...")
+        try:
+            # check data loading
+            X, y = load_darwin(X_y=True)
+            print(f"[OK] Data loaded successfully. Shape: {X.shape}")
+            
+            # check algorithm initialization
+            print("[INFO] Checking algorithm initialization (Ablation Variants)...")
+            p_inflate_values = [0.2, 0.5, 0.8]
+            for p_inf in p_inflate_values:
+                 slim(X_train=X[:10], y_train=y[:10], X_test=X[:10], y_test=y[:10], 
+                     dataset_name='darwin', slim_version="SLIM+SIG2", n_iter=1, pop_size=5, 
+                     verbose=0, n_jobs=1, reconstruct=True, p_inflate=p_inf)
+                 print(f"[OK] SLIM initialized with p_inflate={p_inf}")
+            
+            print("[SUCCESS] Dry run completed successfully.")
+            sys.exit(0)
+        except Exception as e:
+            print(f"[FAIL] Dry run failed: {e}")
+            sys.exit(1)
     
     set_seed(args.run_id)
     run_experiment(args.run_id, args.output_dir, args.pop_size, args.n_iter)

@@ -70,9 +70,6 @@ def main():
     # 1. Setup
     print(f"Starting Experiment: Dataset={args.dataset}, MaxDepth={args.max_depth}, Seed={args.seed}")
     
-    # Fix random seeds
-    # pd.random.seed(args.seed)  # Pandas uses numpy random
-
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     

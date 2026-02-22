@@ -161,7 +161,7 @@ def main():
     
     # 5. Save Results
     slim_version_safe = args.slim_version.replace("*", "MUL")
-    output_dir = os.path.join("results", args.dataset, f"slim_{slim_version_safe}")
+    output_dir = os.path.join("results", args.dataset, slim_version_safe, "feature_importance")
     os.makedirs(output_dir, exist_ok=True)
     
     output_file = os.path.join(output_dir, f"features_depth_{args.max_depth}_seed_{args.seed}.csv")

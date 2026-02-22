@@ -7,8 +7,8 @@
 #SBATCH --account=FUPA1_OMDEAFD
 #SBATCH --partition=dcgp_fua_prod
 #SBATCH --qos=normal
-#SBATCH --error=logs/slurm/explainability_job_%A_task_%a.err
-#SBATCH --output=logs/slurm/explainability_job_%A_task_%a.out
+#SBATCH --error=results/slurm_logs/explainability_job_%A_task_%a.err
+#SBATCH --output=results/slurm_logs/explainability_job_%A_task_%a.out
 #SBATCH --job-name=slim_expl
 #SBATCH --mail-type=FAIL,END
 #SBATCH --mail-user=emanuele.nardone@unicas.it
@@ -99,9 +99,9 @@ echo "Max Depth:       $MAX_DEPTH"
 echo "================================================"
 
 # ── Output directories ───────────────────────────────────────────────────────
-LOG_DIR="results/${DATASET}/slim_${SLIM_VERSION_SAFE}"
+LOG_DIR="results/${DATASET}/${SLIM_VERSION_SAFE}/logs"
 mkdir -p "$LOG_DIR"
-mkdir -p logs/slurm
+mkdir -p results/slurm_logs
 
 LOG_FILE="${LOG_DIR}/explainability_depth_${MAX_DEPTH}_seed_${SEED}.log"
 

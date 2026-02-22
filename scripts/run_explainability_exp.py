@@ -56,6 +56,7 @@ def main():
     parser.add_argument("--n_iter", type=int, default=2000, help="Number of iterations")
     parser.add_argument("--slim_version", type=str, default="SLIM+SIG2", help="SLIM version")
     parser.add_argument("--p_inflate", type=float, default=0.7, help="Probability of inflate mutation")
+    parser.add_argument("--export_formats", type=str, default="text,svg", help="Comma-separated formats to export (e.g. text,svg,html,pdf)")
     
     args = parser.parse_args()
     
@@ -166,15 +167,20 @@ def main():
     df_res.to_csv(features_output_file, index=False)
     print(f"Feature importance saved to {features_output_file}")
     
-    # Export Tree Artifacts (HTML/PDF/Text)
+    # Export Tree Artifacts (HTML/PDF/Text/SVG)
     exporter = TreeExporter()
-    export_results = exporter.export(
-        individual=final_tree,
-        output_dir=output_dir,
-        format="all",
-        filename="final_tree",
-        verbose=True
-    )
+    export_results = {}
+    for fmt in args.export_formats.split(","):
+        fmt = fmt.strip()
+        if not fmt: continue
+        res = exporter.export(
+            individual=final_tree,
+            output_dir=output_dir,
+            format=fmt,
+            filename="final_tree",
+            verbose=True
+        )
+        export_results.update(res)
 
     print("Explainability artifacts created:")
     for fmt, path in export_results.items():

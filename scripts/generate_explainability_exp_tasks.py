@@ -9,7 +9,7 @@ def main():
     ]
     
     slim_version = "SLIM+SIG2"
-    seeds = range(42, 62)  # 20 seeds
+    seeds = [42]  # Only 1 run per dataset per depth
     max_depths = [2, 5, 10, 15, 20]
     
     # 2. Generate Tasks

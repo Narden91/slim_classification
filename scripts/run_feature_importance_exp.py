@@ -160,25 +160,23 @@ def main():
     freq_imp = extractor.frequency_importance(final_tree, normalize=False)
     
     # 5. Save Results
-    output_dir = os.path.join(args.log_dir, args.dataset, f"depth_{args.max_depth}")
+    slim_version_safe = args.slim_version.replace("*", "MUL")
+    output_dir = os.path.join("results", args.dataset, f"slim_{slim_version_safe}")
     os.makedirs(output_dir, exist_ok=True)
     
-    output_file = os.path.join(output_dir, f"features_seed_{args.seed}.csv")
+    output_file = os.path.join(output_dir, f"features_depth_{args.max_depth}_seed_{args.seed}.csv")
     
     # Convert to DataFrame
-    # freq_imp is a dict {feature_name: count}
-    # We want to save row: dataset, max_depth, seed, feature_index, count
-    
     rows = []
     for feat_name, count in freq_imp.items():
-        # feat_name is likely 'f0', 'f1', etc. provided to extractor
         feat_idx = int(feat_name[1:])
         rows.append({
-            "dataset": args.dataset,
-            "max_depth": args.max_depth,
-            "seed": args.seed,
-            "feature_index": feat_idx,
-            "count": count
+            "Dataset": args.dataset,
+            "Max Depth": args.max_depth,
+            "Seed": args.seed,
+            "Feature Index": feat_idx,
+            "Feature Name": feat_name,
+            "Occurrences in Tree": count
         })
         
     df_res = pd.DataFrame(rows)

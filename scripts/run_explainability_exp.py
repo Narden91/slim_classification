@@ -147,20 +147,21 @@ def main():
     freq_imp = extractor.frequency_importance(final_tree, normalize=False)
     
     slim_version_safe = args.slim_version.replace("*", "MUL")
-    output_dir = os.path.join(args.log_dir, args.dataset, slim_version_safe, f"depth_{args.max_depth}", f"seed_{args.seed}")
+    output_dir = os.path.join("results", args.dataset, f"slim_{slim_version_safe}")
     os.makedirs(output_dir, exist_ok=True)
     
-    features_output_file = os.path.join(output_dir, f"features.csv")
+    features_output_file = os.path.join(output_dir, f"features_depth_{args.max_depth}_seed_{args.seed}.csv")
     
     rows = []
     for feat_name, count in freq_imp.items():
         feat_idx = int(feat_name[1:])
         rows.append({
-            "dataset": args.dataset,
-            "max_depth": args.max_depth,
-            "seed": args.seed,
-            "feature_index": feat_idx,
-            "count": count
+            "Dataset": args.dataset,
+            "Max Depth": args.max_depth,
+            "Seed": args.seed,
+            "Feature Index": feat_idx,
+            "Feature Name": feat_name,
+            "Occurrences in Tree": count
         })
         
     df_res = pd.DataFrame(rows)
@@ -177,7 +178,7 @@ def main():
             individual=final_tree,
             output_dir=output_dir,
             format=fmt,
-            filename="final_tree",
+            filename=f"final_tree_depth_{args.max_depth}_seed_{args.seed}",
             verbose=True
         )
         export_results.update(res)

@@ -99,14 +99,11 @@ echo "Max Depth:       $MAX_DEPTH"
 echo "================================================"
 
 # ── Output directories ───────────────────────────────────────────────────────
-# The script will create its own subdirectories
-LOG_DIR="logs_explainability/${DATASET}/${SLIM_VERSION_SAFE}/depth_${MAX_DEPTH}/seed_${SEED}"
-mkdir -p "logs_explainability"
+LOG_DIR="results/${DATASET}/slim_${SLIM_VERSION_SAFE}"
+mkdir -p "$LOG_DIR"
 mkdir -p logs/slurm
 
-LOG_FILE="${LOG_DIR}/stdout.log"
-# Let python script create the logging structure, just pipe standard log out
-mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_DIR}/explainability_depth_${MAX_DEPTH}_seed_${SEED}.log"
 
 echo "Running python script..."
 
@@ -120,7 +117,6 @@ python "$PYTHON_SCRIPT" \
     --pop_size="$POP_SIZE" \
     --n_iter="$N_ITER" \
     --p_inflate="$P_INFLATE" \
-    --log_dir="logs_explainability" \
     > "$LOG_FILE" 2>&1
 
 EXIT_CODE=$?

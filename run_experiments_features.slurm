@@ -105,11 +105,11 @@ echo "Max Depth:       $MAX_DEPTH"
 echo "================================================"
 
 # ── Output directories ───────────────────────────────────────────────────────
-LOG_DIR="logs_feature_imp/${DATASET}/${SLIM_VERSION_SAFE}/depth_${MAX_DEPTH}"
+LOG_DIR="results/${DATASET}/slim_${SLIM_VERSION_SAFE}"
 mkdir -p "$LOG_DIR"
 mkdir -p logs/slurm
 
-LOG_FILE="${LOG_DIR}/run_${RUN_NUMBER}_seed_${SEED}.log"
+LOG_FILE="${LOG_DIR}/run_depth_${MAX_DEPTH}_seed_${SEED}.log"
 
 echo "Running python script..."
 
@@ -123,7 +123,6 @@ python "$PYTHON_SCRIPT" \
     --pop_size="$POP_SIZE" \
     --n_iter="$N_ITER" \
     --p_inflate="$P_INFLATE" \
-    --log_dir="logs_feature_imp" \
     > "$LOG_FILE" 2>&1
 
 EXIT_CODE=$?

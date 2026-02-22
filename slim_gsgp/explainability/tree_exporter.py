@@ -37,17 +37,17 @@ from typing import Any, Dict, List, Optional, Tuple
 from slim_gsgp.explainability.formula_formatter import FormulaFormatter
 
 
-# Modern color palette - lighter colors for black text readability
+# Modern color palette - vibrant professional colors
 COLORS = {
-    'root': '#5dade2',       # Light Blue - SLIM root
-    'block': '#f1948a',      # Light Red/Salmon - Block nodes
-    'operator': '#82e0aa',   # Light Green - Operators (add, multiply, etc.)
-    'mutation': '#f8c471',   # Light Orange - Mutation operators
-    'terminal': '#bb8fce',   # Light Purple - Terminals (variables)
-    'constant': '#76d7c4',   # Light Teal - Constants
-    'ms': '#d5dbdb',         # Light Gray - Mutation step values
-    'edge': '#566573',       # Dark gray - Edges
-    'background': '#fafafa', # Light background
+    'root': '#2E86C1',       # Strong Blue
+    'block': '#E74C3C',      # Red
+    'operator': '#27AE60',   # Green
+    'mutation': '#F39C12',   # Orange
+    'terminal': '#8E44AD',   # Purple
+    'constant': '#16A085',   # Teal
+    'ms': '#BDC3C7',         # Gray
+    'edge': '#34495E',       # Dark blue-gray
+    'background': '#F8F9F9', # Off-white
 }
 
 
@@ -233,7 +233,17 @@ class TreeExporter:
         
         # Add each block
         for i, block in enumerate(individual.collection):
-            block_idx = add_node(f"Block {i+1}", "block", f"Semantic Block {i+1}")
+            block_formula = "Formula unavailable"
+            try:
+                import textwrap
+                raw_formula = self.formatter.format_block(block, i, "text")
+                wrapped_formula = "<br>".join(textwrap.wrap(raw_formula, width=50))
+                block_formula = f"<b>Formula:</b><br>{wrapped_formula}"
+            except Exception:
+                pass
+                
+            tooltip = f"<b>Semantic Block {i+1}</b><br><br>{block_formula}"
+            block_idx = add_node(f"Block {i+1}", "block", tooltip)
             edges.append((root_idx, block_idx))
             
             if hasattr(block, 'structure'):
@@ -384,20 +394,39 @@ class TreeExporter:
             x_scaled = [x * 10 for x in x_pos]
             y_scaled = [y * 1.5 for y in y_pos]
             
-            # Create edge traces
-            edge_x = []
-            edge_y = []
+            # Pre-calculate node sizes so edges can offset correctly
+            node_sizes = []
+            for i, n in enumerate(nodes):
+                text_len = len(n['label'])
+                node_type = n['type']
+                # Base size + extra size per character
+                if node_type in {'root', 'block'}:
+                    node_sizes.append(max(60, 20 + text_len * 6))
+                else:
+                    node_sizes.append(max(45, 15 + text_len * 5))
+                    
+            # Create edge annotations (fancy directed arrows)
+            edge_annotations = []
             for parent, child in edges:
-                edge_x.extend([x_scaled[parent], x_scaled[child], None])
-                edge_y.extend([y_scaled[parent], y_scaled[child], None])
-            
-            edge_trace = go.Scatter(
-                x=edge_x, y=edge_y,
-                mode='lines',
-                line=dict(width=2, color=COLORS['edge']),
-                hoverinfo='none',
-                showlegend=False,
-            )
+                # standoff radius is approx half the size + padding
+                target_standoff = (node_sizes[child] / 2) + 2
+                source_standoff = (node_sizes[parent] / 2) + 2
+                    
+                edge_annotations.append(
+                    dict(
+                        ax=x_scaled[parent], ay=y_scaled[parent],
+                        x=x_scaled[child], y=y_scaled[child],
+                        xref='x', yref='y',
+                        axref='x', ayref='y',
+                        showarrow=True,
+                        arrowhead=2,
+                        arrowsize=1.2,
+                        arrowwidth=1.5,
+                        arrowcolor=COLORS['edge'],
+                        standoff=target_standoff,
+                        startstandoff=source_standoff
+                    )
+                )
             
             # Create node traces (one per type for legend)
             node_traces = []
@@ -413,33 +442,41 @@ class TreeExporter:
                 'ms': 'Mutation Step',
             }
             
+            symbol_map = {
+                'root': 'square',
+                'block': 'square',
+                'operator': 'circle',
+                'mutation': 'square',
+                'terminal': 'circle',
+                'constant': 'circle',
+                'ms': 'circle-open'
+            }
+            
             for node_type in node_types:
                 indices = [i for i, n in enumerate(nodes) if n['type'] == node_type]
                 
-                # Larger sizes for better text visibility
-                if node_type in {'root', 'block'}:
-                    marker_size = 55
-                elif node_type in {'mutation', 'operator'}:
-                    marker_size = 50
-                else:
-                    marker_size = 45
+                # Retrieve pre-calculated sizes
+                sizes = [node_sizes[i] for i in indices]
+                
+                text_color = 'white' if node_type != 'ms' else 'black'
                 
                 node_trace = go.Scatter(
                     x=[x_scaled[i] for i in indices],
                     y=[y_scaled[i] for i in indices],
                     mode='markers+text',
                     marker=dict(
-                        size=marker_size,
+                        size=sizes,
                         color=COLORS.get(node_type, '#888888'),
-                        line=dict(width=2, color='#333333'),
-                        symbol='square' if node_type in {'root', 'block', 'mutation'} else 'circle',
+                        line=dict(width=2, color='#2C3E50'),
+                        symbol=symbol_map.get(node_type, 'circle'),
+                        opacity=0.95
                     ),
-                    text=[nodes[i]['label'] for i in indices],
+                    text=[f"<b>{nodes[i]['label']}</b>" for i in indices],
                     textposition='middle center',
                     textfont=dict(
-                        size=11,
-                        color='black',
-                        family='Arial',
+                        size=10,
+                        color=text_color,
+                        family='Arial Black, Arial, sans-serif',
                     ),
                     hovertext=[nodes[i]['tooltip'] for i in indices],
                     hoverinfo='text',
@@ -451,8 +488,19 @@ class TreeExporter:
             # Create figure
             version = getattr(individual, 'version', self.slim_version) or "SLIM"
             
+            # Add general annotations
+            general_annotations = [
+                dict(
+                    text=f"Blocks: {len(individual.collection)} | Nodes: {len(nodes)}",
+                    xref="paper", yref="paper",
+                    x=0.5, y=-0.05,
+                    showarrow=False,
+                    font=dict(size=12, color='#666'),
+                )
+            ]
+            
             fig = go.Figure(
-                data=[edge_trace] + node_traces,
+                data=node_traces,
                 layout=go.Layout(
                     title=dict(
                         text=f'<b>SLIM Tree Structure</b><br><sup>{version}</sup>',
@@ -483,15 +531,7 @@ class TreeExporter:
                     plot_bgcolor=COLORS['background'],
                     paper_bgcolor='white',
                     margin=dict(l=40, r=150, t=80, b=40),
-                    annotations=[
-                        dict(
-                            text=f"Blocks: {len(individual.collection)} | Nodes: {len(nodes)}",
-                            xref="paper", yref="paper",
-                            x=0.5, y=-0.05,
-                            showarrow=False,
-                            font=dict(size=12, color='#666'),
-                        )
-                    ],
+                    annotations=general_annotations + edge_annotations,
                 )
             )
             

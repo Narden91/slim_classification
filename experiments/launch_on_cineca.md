@@ -1,34 +1,25 @@
 # Launching Experiments on Cineca
 
-To launch these specific experiments using the existing `launch_cineca_flexible.sh` from the root directory, you can override the python script and task list via environment variables.
+To launch these specific experiments, use the dedicated `launch_custom_experiments.sh` script located in the root directory. This script will automatically map the appropriate custom Python configuration to the SLURM scheduler array, deploying runs perfectly segregated into `results/experiments/{experiment_name}`.
 
-A helper task list at `config/experiments_task_list.csv` has been created, containing 30 seeds (rows 0-29).
+A helper task list at `config/experiments_task_list.csv` has been created, dictating the 30 seeds (rows 0-29).
 
 ## 1. Experiment 1: DARWIN Benchmark
 ```bash
 # Launch 30 runs (seeds 0-29)
-export PYTHON_SCRIPT="experiments/exp_1_darwin.py"
-export TASK_LIST="config/experiments_task_list.csv"
-
-./launch_cineca_flexible.sh --count 30
+./launch_custom_experiments.sh --script experiments/exp_1_darwin.py --count 30
 ```
 
 ## 2. Experiment 2: HAND_STAT Benchmark
 ```bash
 # Launch 30 runs (seeds 0-29)
-export PYTHON_SCRIPT="experiments/exp_2_hand_stat.py"
-export TASK_LIST="config/experiments_task_list.csv"
-
-./launch_cineca_flexible.sh --count 30
+./launch_custom_experiments.sh --script experiments/exp_2_hand_stat.py --count 30
 ```
 
 ## 3. Experiment 3: SLIM Ablation Study
 ```bash
 # Launch 30 runs (seeds 0-29)
-export PYTHON_SCRIPT="experiments/exp_3_ablation.py"
-export TASK_LIST="config/experiments_task_list.csv"
-
-./launch_cineca_flexible.sh --count 30
+./launch_custom_experiments.sh --script experiments/exp_3_ablation.py --count 30
 ```
 
 ## Note on Dry Run

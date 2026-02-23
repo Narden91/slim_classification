@@ -99,11 +99,8 @@ echo "Max Depth:       $MAX_DEPTH"
 echo "================================================"
 
 # ── Output directories ───────────────────────────────────────────────────────
-LOG_DIR="results/${DATASET}/${SLIM_VERSION_SAFE}/logs"
-mkdir -p "$LOG_DIR"
+# Logs are automatically managed by SLURM and saved to results/slurm_logs/
 mkdir -p results/slurm_logs
-
-LOG_FILE="${LOG_DIR}/explainability_depth_${MAX_DEPTH}_seed_${SEED}.log"
 
 echo "Running python script..."
 
@@ -116,8 +113,7 @@ python "$PYTHON_SCRIPT" \
     --slim_version="$SLIM_VERSION" \
     --pop_size="$POP_SIZE" \
     --n_iter="$N_ITER" \
-    --p_inflate="$P_INFLATE" \
-    > "$LOG_FILE" 2>&1
+    --p_inflate="$P_INFLATE"
 
 EXIT_CODE=$?
 

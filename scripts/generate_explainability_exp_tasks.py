@@ -5,10 +5,10 @@ def main():
     # 1. Define Design Space
     datasets = [
         "gina", "blood", "eeg", "scene", "fertility", "liver", "ozone", "pc1", 
-        "pc3", "qsar", "retinopathy", "spam", "spect", "hill", "ilpd", "kc1", "musk1"
+        "pc3", "qsar", "retinopathy", "spam", "spect", "hill", "ilpd", "kc1", "musk1", "clima"
     ]
     
-    slim_version = "SLIM+SIG2"
+    slim_versions = ["SLIM+SIG2", "SLIM*SIG2", "SLIM+ABS", "SLIM*ABS", "SLIM+SIG1", "SLIM*SIG1"]
     seeds = [42]  # Only 1 run per dataset per depth
     max_depths = [2, 5, 10, 15, 20]
     
@@ -17,18 +17,19 @@ def main():
     task_id = 0
     
     for dataset in datasets:
-        for depth in max_depths:
-            for i, seed in enumerate(seeds):
-                run_number = i + 1
-                tasks.append({
-                    "task_id": task_id,
-                    "dataset": dataset,
-                    "slim_version": slim_version,
-                    "seed": seed,
-                    "run_number": run_number,
-                    "max_depth": depth
-                })
-                task_id += 1
+        for slim_version in slim_versions:
+            for depth in max_depths:
+                for i, seed in enumerate(seeds):
+                    run_number = i + 1
+                    tasks.append({
+                        "task_id": task_id,
+                        "dataset": dataset,
+                        "slim_version": slim_version,
+                        "seed": seed,
+                        "run_number": run_number,
+                        "max_depth": depth
+                    })
+                    task_id += 1
                 
     # 3. Create DataFrame
     df = pd.DataFrame(tasks)

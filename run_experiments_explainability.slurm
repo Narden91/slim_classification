@@ -43,8 +43,21 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export PYTHONUNBUFFERED=1
 
 # ── Configuration ────────────────────────────────────────────────────────────
-TASK_LIST="${TASK_LIST:-config/task_list_explainability.csv}"
-PYTHON_SCRIPT="${PYTHON_SCRIPT:-scripts/run_explainability_exp.py}"
+TASK_LIST_DEFAULT="config/task_list_explainability.csv"
+PYTHON_SCRIPT_DEFAULT="scripts/run_explainability_exp.py"
+
+# By default, ignore inherited TASK_LIST/PYTHON_SCRIPT from shell/session to prevent
+# accidental cross-experiment execution. Set ALLOW_ENV_OVERRIDE=1 to opt in.
+ALLOW_ENV_OVERRIDE="${ALLOW_ENV_OVERRIDE:-0}"
+if [ "$ALLOW_ENV_OVERRIDE" = "1" ]; then
+    TASK_LIST="${TASK_LIST:-$TASK_LIST_DEFAULT}"
+    PYTHON_SCRIPT="${PYTHON_SCRIPT:-$PYTHON_SCRIPT_DEFAULT}"
+else
+    TASK_LIST="$TASK_LIST_DEFAULT"
+    PYTHON_SCRIPT="$PYTHON_SCRIPT_DEFAULT"
+fi
+
+EXPORT_FORMATS="${EXPORT_FORMATS:-html,svg,text}"
 TASK_FROM="${TASK_FROM:-0}"
 TASK_TO="${TASK_TO:-0}"
 
@@ -88,6 +101,32 @@ MAX_DEPTH=$(echo "$MAX_DEPTH" | tr -d '\r' | xargs)
 SLIM_VERSION_SAFE="${SLIM_VERSION//\*/MUL}"
 
 echo "================================================"
+echo "Resolved Runtime Configuration"
+echo "================================================"
+echo "ALLOW_ENV_OVERRIDE: $ALLOW_ENV_OVERRIDE"
+echo "TASK_LIST:          $TASK_LIST"
+echo "PYTHON_SCRIPT:      $PYTHON_SCRIPT"
+echo "EXPORT_FORMATS:     $EXPORT_FORMATS"
+echo "================================================"
+
+# Best-effort dependency preflight (non-blocking)
+if [[ ",${EXPORT_FORMATS}," == *",html,"* ]] || [[ ",${EXPORT_FORMATS}," == *",svg,"* ]] || [[ ",${EXPORT_FORMATS}," == *",pdf,"* ]]; then
+    python - <<'PY'
+import importlib.util
+import shutil
+
+has_plotly = importlib.util.find_spec("plotly") is not None
+has_kaleido = importlib.util.find_spec("kaleido") is not None
+has_chrome = any(shutil.which(cmd) for cmd in ("google-chrome", "chrome", "chromium", "chromium-browser"))
+
+print("Dependency preflight:")
+print(f" - plotly:  {'OK' if has_plotly else 'MISSING'}")
+print(f" - kaleido: {'OK' if has_kaleido else 'MISSING'}")
+print(f" - chrome:  {'OK' if has_chrome else 'MISSING'}")
+PY
+    echo "================================================"
+fi
+
 echo "Task Configuration"
 echo "================================================"
 echo "Task ID:         $TASK_ID"
@@ -113,7 +152,8 @@ python "$PYTHON_SCRIPT" \
     --slim_version="$SLIM_VERSION" \
     --pop_size="$POP_SIZE" \
     --n_iter="$N_ITER" \
-    --p_inflate="$P_INFLATE"
+    --p_inflate="$P_INFLATE" \
+    --export_formats="$EXPORT_FORMATS"
 
 EXIT_CODE=$?
 

@@ -1,6 +1,8 @@
 import argparse
 import os
 import sys
+import shutil
+import importlib.util
 import pandas as pd
 import torch
 import numpy as np
@@ -16,6 +18,42 @@ from slim_gsgp.evaluators.fitness_functions import binary_cross_entropy, rmse
 from slim_gsgp.explainability.feature_importance import FeatureImportanceExtractor
 from slim_gsgp.explainability.tree_exporter import TreeExporter
 from slim_gsgp.main_slim import slim
+
+
+def resolve_export_formats(raw_formats: str):
+    allowed = {"text", "html", "svg", "pdf"}
+    requested = [fmt.strip().lower() for fmt in raw_formats.split(",") if fmt.strip()]
+    if not requested:
+        requested = ["text"]
+
+    has_plotly = importlib.util.find_spec("plotly") is not None
+    has_kaleido = importlib.util.find_spec("kaleido") is not None
+    has_chrome = any(
+        shutil.which(cmd)
+        for cmd in ("google-chrome", "chrome", "chromium", "chromium-browser")
+    )
+
+    selected = []
+    for fmt in requested:
+        if fmt not in allowed:
+            print(f"Skipping unsupported export format: {fmt}")
+            continue
+        if fmt in {"html", "svg", "pdf"} and not has_plotly:
+            if fmt == "svg":
+                selected.append(fmt)
+                continue
+            print(f"Skipping {fmt}: plotly is not installed")
+            continue
+        if fmt == "pdf" and (not has_kaleido or not has_chrome):
+            print(f"Skipping {fmt}: requires kaleido and a Chrome/Chromium binary")
+            continue
+        selected.append(fmt)
+
+    if not selected:
+        selected = ["text"]
+        print("No visual export backend available. Falling back to text export only.")
+
+    return selected
 
 def load_dataset(dataset_name, benchmark_dir="slim_gsgp/datasets/benchmark"):
     """
@@ -56,7 +94,7 @@ def main():
     parser.add_argument("--n_iter", type=int, default=2000, help="Number of iterations")
     parser.add_argument("--slim_version", type=str, default="SLIM+SIG2", help="SLIM version")
     parser.add_argument("--p_inflate", type=float, default=0.7, help="Probability of inflate mutation")
-    parser.add_argument("--export_formats", type=str, default="text,svg", help="Comma-separated formats to export (e.g. text,svg,html,pdf)")
+    parser.add_argument("--export_formats", type=str, default="html,svg,text", help="Comma-separated formats to export (e.g. text,html,svg,pdf)")
     
     args = parser.parse_args()
     
@@ -106,6 +144,18 @@ def main():
         init_depth = max(2, args.max_depth - 2)
         print(f"Adjusted init_depth to {init_depth} for max_depth={args.max_depth}")
 
+    slim_version_safe = args.slim_version.replace("*", "MUL")
+    output_dir = os.path.join("results", args.dataset, slim_version_safe, "explainability")
+    os.makedirs(output_dir, exist_ok=True)
+
+    export_formats = resolve_export_formats(args.export_formats)
+    print(f"Resolved export formats: {','.join(export_formats)}")
+
+    log_path = os.path.join(
+        output_dir,
+        f"slim_internal_depth_{args.max_depth}_seed_{args.seed}.csv"
+    )
+
     final_tree = slim(
         X_train=X_train,
         y_train=y_train,
@@ -122,7 +172,8 @@ def main():
         reconstruct=True,  # Crucial for feature extraction and export
         n_jobs=1,
         verbose=0,
-        log_level=0, 
+        log_level=0,
+        log_path=log_path,
         fitness_function=fitness_function
     )
     
@@ -146,10 +197,6 @@ def main():
     
     freq_imp = extractor.frequency_importance(final_tree, normalize=False)
     
-    slim_version_safe = args.slim_version.replace("*", "MUL")
-    output_dir = os.path.join("results", args.dataset, slim_version_safe, "explainability")
-    os.makedirs(output_dir, exist_ok=True)
-    
     features_output_file = os.path.join(output_dir, f"features_depth_{args.max_depth}_seed_{args.seed}.csv")
     
     rows = []
@@ -171,9 +218,7 @@ def main():
     # Export Tree Artifacts (HTML/PDF/Text/SVG)
     exporter = TreeExporter()
     export_results = {}
-    for fmt in args.export_formats.split(","):
-        fmt = fmt.strip()
-        if not fmt: continue
+    for fmt in export_formats:
         res = exporter.export(
             individual=final_tree,
             output_dir=output_dir,

@@ -33,6 +33,7 @@ Cross-platform: Works on Windows and Linux without external binaries.
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
+from xml.sax.saxutils import escape
 
 from slim_gsgp.explainability.formula_formatter import FormulaFormatter
 
@@ -104,6 +105,103 @@ class TreeExporter:
         directory = os.path.dirname(path)
         if directory:
             os.makedirs(directory, exist_ok=True)
+
+    def _export_svg_fallback(self, individual: Any, output_path: str) -> Optional[str]:
+        """Export a static SVG using a lightweight built-in renderer (no plotly/chrome)."""
+        if not hasattr(individual, 'collection'):
+            print("  Warning: Individual has no collection. Cannot export SVG.")
+            return None
+
+        try:
+            nodes, edges = self._build_tree_data(individual)
+            if not nodes:
+                print("  Warning: Empty tree. Cannot export SVG.")
+                return None
+
+            x_pos, y_pos = self._compute_tree_layout(nodes, edges)
+
+            width = 1800
+            height = max(900, 220 + 120 * (max((-y for y in y_pos), default=0) + 1))
+            margin_x = 90
+            margin_y = 90
+
+            x_min, x_max = min(x_pos), max(x_pos)
+            y_min, y_max = min(y_pos), max(y_pos)
+
+            x_den = (x_max - x_min) if x_max != x_min else 1.0
+            y_den = (y_max - y_min) if y_max != y_min else 1.0
+
+            x_pix = [margin_x + ((x - x_min) / x_den) * (width - 2 * margin_x) for x in x_pos]
+            y_pix = [margin_y + ((y - y_min) / y_den) * (height - 2 * margin_y) for y in y_pos]
+
+            def node_size(label: str, node_type: str) -> float:
+                if node_type in {'root', 'block', 'mutation'}:
+                    return max(38.0, 18.0 + 2.5 * len(label))
+                return max(26.0, 12.0 + 2.0 * len(label))
+
+            node_sizes = [node_size(n['label'], n['type']) for n in nodes]
+
+            svg_parts: List[str] = []
+            svg_parts.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">')
+            svg_parts.append('<defs>')
+            svg_parts.append('<marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">')
+            svg_parts.append(f'<path d="M 0 0 L 10 5 L 0 10 z" fill="{COLORS["edge"]}" />')
+            svg_parts.append('</marker>')
+            svg_parts.append('</defs>')
+            svg_parts.append(f'<rect x="0" y="0" width="{width}" height="{height}" fill="{COLORS["background"]}"/>')
+
+            version = escape(str(getattr(individual, 'version', self.slim_version) or 'SLIM'))
+            svg_parts.append(f'<text x="{width/2}" y="36" text-anchor="middle" font-family="Arial" font-size="24" font-weight="bold" fill="#1f2937">SLIM Tree Structure</text>')
+            svg_parts.append(f'<text x="{width/2}" y="64" text-anchor="middle" font-family="Arial" font-size="16" fill="#4b5563">{version}</text>')
+
+            for parent, child in edges:
+                x1, y1 = x_pix[parent], y_pix[parent]
+                x2, y2 = x_pix[child], y_pix[child]
+                svg_parts.append(
+                    f'<line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
+                    f'stroke="{COLORS["edge"]}" stroke-width="1.8" marker-end="url(#arrow)"/>'
+                )
+
+            for i, node in enumerate(nodes):
+                x = x_pix[i]
+                y = y_pix[i]
+                size = node_sizes[i]
+                fill = COLORS.get(node['type'], '#888888')
+                label = escape(str(node['label']))
+                tooltip = escape(str(node.get('tooltip', label)))
+
+                text_color = 'white' if node['type'] != 'ms' else '#111827'
+                if node['type'] in {'root', 'block', 'mutation'}:
+                    w = size * 1.8
+                    h = size
+                    rx = 8
+                    svg_parts.append(
+                        f'<rect x="{x - w/2:.2f}" y="{y - h/2:.2f}" width="{w:.2f}" height="{h:.2f}" '
+                        f'rx="{rx}" ry="{rx}" fill="{fill}" stroke="#2C3E50" stroke-width="2">'
+                        f'<title>{tooltip}</title></rect>'
+                    )
+                else:
+                    r = size / 2
+                    svg_parts.append(
+                        f'<circle cx="{x:.2f}" cy="{y:.2f}" r="{r:.2f}" fill="{fill}" '
+                        f'stroke="#2C3E50" stroke-width="2"><title>{tooltip}</title></circle>'
+                    )
+
+                svg_parts.append(
+                    f'<text x="{x:.2f}" y="{y + 4:.2f}" text-anchor="middle" '
+                    f'font-family="Arial" font-size="10" font-weight="bold" fill="{text_color}">{label}</text>'
+                )
+
+            svg_parts.append('</svg>')
+
+            self._ensure_directory(output_path)
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write("\n".join(svg_parts))
+
+            return output_path
+        except Exception as e:
+            print(f"  Warning: Fallback SVG export failed: {str(e)}")
+            return None
     
     def _build_tree_data(self, individual: Any) -> Tuple[List[Dict], List[Tuple[int, int]]]:
         """
@@ -363,12 +461,19 @@ class TreeExporter:
         str or None
             Path to the generated file, or None if failed.
         """
+        if format == "svg" and not self._visualization_available:
+            print("  Note: plotly not installed. Using built-in SVG fallback renderer.")
+            return self._export_svg_fallback(individual, f"{output_path}.svg")
+
         if not self._visualization_available:
             print("  Note: plotly not installed. Skipping visualization.")
             print("        Install with: pip install plotly kaleido")
             return None
         
         if format in {"svg", "pdf"} and not self._check_static_export_deps():
+            if format == "svg":
+                print("  Note: kaleido not installed. Using built-in SVG fallback renderer.")
+                return self._export_svg_fallback(individual, f"{output_path}.svg")
             print(f"  Note: kaleido not installed. Skipping {format} export.")
             print("        Install with: pip install kaleido")
             return None
@@ -543,6 +648,12 @@ class TreeExporter:
             
             if format == "html":
                 fig.write_html(final_path, include_plotlyjs='cdn')
+            elif format == "svg":
+                try:
+                    fig.write_image(final_path, width=1200, height=800, scale=2)
+                except Exception as e:
+                    print(f"  Note: Plotly static SVG export failed ({str(e)}). Using built-in SVG fallback renderer.")
+                    return self._export_svg_fallback(individual, final_path)
             else:
                 # Use kaleido for static exports
                 fig.write_image(final_path, width=1200, height=800, scale=2)

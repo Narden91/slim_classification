@@ -20,3 +20,5 @@ venv/*
 env/
 venv_slim/*
 results.tar.gz
+results_feat_occ/*
+.github/skills/*

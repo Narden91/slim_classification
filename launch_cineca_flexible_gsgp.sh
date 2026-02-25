@@ -12,6 +12,11 @@ TO_TASK=""
 COUNT=""
 ALL_MODE=0
 DRY_RUN=0
+SKIP_SANITY=0
+
+SANITY_POP_SIZE="${SANITY_POP_SIZE:-20}"
+SANITY_N_ITER="${SANITY_N_ITER:-5}"
+SANITY_SIGMOID_SCALE="${SANITY_SIGMOID_SCALE:-0.01}"
 
 fail() {
   echo "ERROR: $1" >&2
@@ -37,6 +42,10 @@ Batching:
 
 Dry-run:
   --dry-run        Validate everything and print sbatch commands without submitting.
+
+Sanity check:
+  A short local GSGP run is executed automatically before sbatch submission.
+  Use --skip-sanity to disable it.
 
 Examples:
   $0 --all
@@ -68,6 +77,10 @@ while [ $# -gt 0 ]; do
       ;;
     --dry-run)
       DRY_RUN=1
+      shift
+      ;;
+    --skip-sanity)
+      SKIP_SANITY=1
       shift
       ;;
     -h|--help)
@@ -157,6 +170,46 @@ echo "Total tasks:   $SELECTED_COUNT"
 echo "Batch size:    50"
 echo "Batches:       $TOTAL_BATCHES (full=$FULL_BATCHES, remainder=$REMAINDER)"
 echo "Dry-run:       $DRY_RUN"
+
+if [ "$DRY_RUN" -eq 0 ] && [ "$SKIP_SANITY" -eq 0 ]; then
+  [[ "$SANITY_POP_SIZE" =~ ^[0-9]+$ ]] || fail "SANITY_POP_SIZE must be a non-negative integer"
+  [[ "$SANITY_N_ITER" =~ ^[0-9]+$ ]] || fail "SANITY_N_ITER must be a non-negative integer"
+  [ "$SANITY_POP_SIZE" -gt 0 ] || fail "SANITY_POP_SIZE must be greater than 0"
+  [ "$SANITY_N_ITER" -gt 0 ] || fail "SANITY_N_ITER must be greater than 0"
+
+  FIRST_LINE_NUM=$((FROM_TASK + 2))
+  FIRST_TASK_CONFIG=$(sed -n "${FIRST_LINE_NUM}p" "$TASK_LIST")
+  [ -n "$FIRST_TASK_CONFIG" ] || fail "Could not read first selected task row from $TASK_LIST"
+
+  IFS=',' read -r _TASK_ID SANITY_DATASET SANITY_SEED _RUN_NUMBER <<< "$FIRST_TASK_CONFIG"
+  SANITY_DATASET=$(echo "$SANITY_DATASET" | tr -d '\r' | xargs)
+  SANITY_SEED=$(echo "$SANITY_SEED" | tr -d '\r' | xargs)
+
+  [ -n "$SANITY_DATASET" ] || fail "Sanity-check dataset is empty in selected task row"
+  [[ "$SANITY_SEED" =~ ^-?[0-9]+$ ]] || fail "Sanity-check seed is not a valid integer: $SANITY_SEED"
+
+  echo "Running local sanity check before submission..."
+  echo "Sanity config: dataset=$SANITY_DATASET seed=$SANITY_SEED pop_size=$SANITY_POP_SIZE n_iter=$SANITY_N_ITER"
+
+  source "$VENV_ACTIVATE" || fail "Failed to activate virtual environment: $VENV_ACTIVATE"
+
+  python "$PYTHON_SCRIPT" \
+    --dataset="$SANITY_DATASET" \
+    --algorithm="gsgp" \
+    --pop-size="$SANITY_POP_SIZE" \
+    --n-iter="$SANITY_N_ITER" \
+    --sigmoid-scale="$SANITY_SIGMOID_SCALE" \
+    --seed="$SANITY_SEED" \
+    --device="cpu" \
+    --verbose="0" \
+    >/dev/null
+
+  echo "Sanity check passed."
+elif [ "$DRY_RUN" -eq 1 ]; then
+  echo "Dry-run mode: skipping local sanity check and sbatch submission."
+elif [ "$SKIP_SANITY" -eq 1 ]; then
+  echo "Sanity check skipped by user (--skip-sanity)."
+fi
 
 for ((start=FROM_TASK; start<=TO_TASK; start+=50)); do
   end=$((start + 49))

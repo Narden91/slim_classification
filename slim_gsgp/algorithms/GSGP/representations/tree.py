@@ -232,30 +232,71 @@ class Tree:
         if not hasattr(self, "structure"):
             raise Exception("If reconstruct was set to False, .predict() is not available.")
 
-        # if the individual is a base (gp) tree, use apply_tree to compute its semantics
-        if isinstance(self.structure, tuple):
-            return apply_tree(self, data)
+        # Evaluate iteratively to avoid recursion-limit failures on deep evolved trees.
+        # GSGP individuals are DAG-like compositions of previous trees; this computes
+        # node outputs in post-order without recursive Python calls.
+        memo = {}
+        processing = set()
+        stack = [(self, False)]
 
-        # if it's not, compute its semantics by calling its operator (crossover or mutation) with its base trees
-        else:
-            # getting the mutation steps used
-            ms = [ms for ms in self.structure[1:] if isinstance(ms, float)]
-            # getting the base trees used
-            base_trees = list(filter(lambda x: isinstance(x, Tree), self.structure))
+        while stack:
+            node, expanded = stack.pop()
+            node_id = id(node)
 
-            # if crossover
-            if self.structure[0] == geometric_crossover:
-                return self.structure[0](
-                    *[tree.predict(data) for tree in base_trees[:-1]], torch.sigmoid(base_trees[-1].predict(data)),
-                    testing=False, new_data=True
-                )
-            # if mutation
-            else:
-                # only apply the sigmoid to the random trees (in indexes 1 and 2)
-                return self.structure[0](
-                    *[torch.sigmoid(tree.predict(data)) if i != 0 else tree.predict(data) for i, tree in
-                      enumerate(base_trees)], *ms, testing=False, new_data=True
-                )
+            if node_id in memo:
+                continue
+
+            if not hasattr(node, "structure"):
+                raise Exception("If reconstruct was set to False, .predict() is not available.")
+
+            if expanded:
+                structure = node.structure
+                if isinstance(structure, tuple):
+                    memo[node_id] = apply_tree(node, data)
+                else:
+                    op = structure[0]
+                    ms_values = [ms for ms in structure[1:] if isinstance(ms, float)]
+                    base_trees = [tree for tree in structure if isinstance(tree, Tree)]
+                    base_outputs = [memo[id(tree)] for tree in base_trees]
+
+                    if op == geometric_crossover:
+                        memo[node_id] = op(
+                            *base_outputs[:-1],
+                            torch.sigmoid(base_outputs[-1]),
+                            testing=False,
+                            new_data=True,
+                        )
+                    else:
+                        memo[node_id] = op(
+                            *[
+                                torch.sigmoid(output) if i != 0 else output
+                                for i, output in enumerate(base_outputs)
+                            ],
+                            *ms_values,
+                            testing=False,
+                            new_data=True,
+                        )
+
+                processing.discard(node_id)
+                continue
+
+            if node_id in processing:
+                raise RuntimeError("Cycle detected in GSGP tree structure during prediction.")
+
+            processing.add(node_id)
+            stack.append((node, True))
+
+            structure = node.structure
+            if isinstance(structure, tuple):
+                continue
+
+            child_trees = [tree for tree in structure if isinstance(tree, Tree)]
+            for child in reversed(child_trees):
+                child_id = id(child)
+                if child_id not in memo:
+                    stack.append((child, False))
+
+        return memo[id(self)]
 
 
 

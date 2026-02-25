@@ -41,7 +41,7 @@ BASE_SEED=42
 #Spect 
 
 # Define the datasets to process
-DATASETS=("gina" "blood" "eeg" "scene" "fertility" "liver" "ozone" "pc1" "pc3" "qsar" "retinopathy" "spam" "spect" "hill" "ilpd" "kc1" "musk1") # ("gina" "eeg" "scene" "fertility" "liver" "ozone")
+DATASETS=("gina" "blood" "eeg" "scene" "fertility" "liver" "ozone" "pc1" "pc3" "qsar" "retinopathy" "spam" "spect" "hill" "ilpd" "kc1" "musk1" "clima") # ("gina" "eeg" "scene" "fertility" "liver" "ozone")
 
 ALGORITHM="slim"
 SLIM_VERSION=("SLIM+SIG2" "SLIM*SIG2" "SLIM+ABS" "SLIM*ABS" "SLIM+SIG1" "SLIM*SIG1") # ("SLIM+SIG2" "SLIM*SIG2" "SLIM+ABS" "SLIM*ABS" "SLIM+SIG1" "SLIM*SIG1")

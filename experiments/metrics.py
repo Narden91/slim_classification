@@ -1,5 +1,6 @@
 
 import torch
+from slim_gsgp.classification.utils import apply_sigmoid
 
 def get_accuracy(y_true, y_pred):
     """
@@ -39,20 +40,14 @@ def get_specificity(y_true, y_pred):
     result = TN / (TN + FP) if (TN + FP) > 0 else torch.tensor(0.0)
     return result
 
-def get_all_metrics(y_true, y_pred_continuous):
+def get_all_metrics(y_true, y_pred_continuous, sigmoid_scale=1.0):
     """
     Calculate all classification metrics.
     y_true: tensor of true labels (0/1)
     y_pred_continuous: tensor of continuous predictions (logits or raw scores)
+    sigmoid_scale: scaling factor applied before sigmoid
     """
-    # Threshold at 0 for signed errors/logits, or 0.5 for probabilities? 
-    # SLIM often returns raw values or sigmoid. Check implementation.
-    # In binary.py of slim, it uses sigmoid. 
-    # Let's assume input needs to be thresholded.
-    # If the range is large, 0 is a safer threshold for raw, but 0.5 for sigmoid.
-    # Let's assume sigmoid output [0,1].
-    
-    y_pred_probs = torch.sigmoid(y_pred_continuous)
+    y_pred_probs = apply_sigmoid(y_pred_continuous, scaling_factor=sigmoid_scale, _skip_validation=True)
     y_pred_labels = (y_pred_probs >= 0.5).float()
     
     acc = get_accuracy(y_true, y_pred_labels)
@@ -60,6 +55,8 @@ def get_all_metrics(y_true, y_pred_continuous):
     spec = get_specificity(y_true, y_pred_labels)
     
     return {
+        "main_metric_name": "accuracy",
+        "main_metric_value": acc.item(),
         "accuracy": acc.item(),
         "precision": prec.item(),
         "recall": rec.item(),

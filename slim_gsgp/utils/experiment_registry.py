@@ -325,7 +325,7 @@ def experiment_run_from_config(config: Any) -> ExperimentRun:
     extra_params = {
         "use_sigmoid": _get_config_value(config, "use_sigmoid", True),
         "sigmoid_scale": _get_config_value(config, "sigmoid_scale", 1.0),
-        "fitness_function": _get_config_value(config, "fitness_function", "binary_rmse"),
+        "fitness_function": _get_config_value(config, "fitness_function", "binary_cross_entropy"),
         "save_visualization": _get_config_value(config, "save_visualization", False),
         "verbose": _get_config_value(config, "verbose", False),
     }

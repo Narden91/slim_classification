@@ -13,6 +13,10 @@ FROM_TASK=""
 TO_TASK=""
 COUNT=""
 ALL_MODE=0
+POP_SIZE="${POP_SIZE:-500}"
+N_ITER="${N_ITER:-2000}"
+SIGMOID_SCALE="${SIGMOID_SCALE:-1}"
+FITNESS_FUNCTION="${FITNESS_FUNCTION:-binary_cross_entropy}"
 
 fail() {
   echo "ERROR: $1" >&2
@@ -22,7 +26,7 @@ fail() {
 usage() {
   cat <<EOF
 Usage:
-  $0 --script experiments/exp_1_darwin.py --count 30
+  $0 --script experiments/exp_1_darwin.py --count 20
   $0 --script experiments/exp_2_hand_stat.py --all
   $0 --script experiments/exp_3_ablation.py --from 0 --to 29
 
@@ -32,7 +36,13 @@ Selection modes:
   --count          Launch K tasks starting from --from (default: 0)
 
 Defaults:
-  If no selection mode is provided, this launcher runs --count 30 from --from 0.
+  If no selection mode is provided, this launcher runs --count 20 from --from 0.
+
+Execution parameters:
+  --pop-size         Population size (default: 500)
+  --n-iter           Number of generations (default: 2000)
+  --sigmoid-scale    Sigmoid scaling factor (default: 1)
+  --fitness-function Fitness function (default: binary_cross_entropy)
 
 Batching:
   Tasks are submitted in batches of 50 via multiple sbatch array calls.
@@ -65,6 +75,26 @@ while [ $# -gt 0 ]; do
       COUNT="$2"
       shift 2
       ;;
+    --pop-size)
+      [ $# -ge 2 ] || fail "Missing value for --pop-size"
+      POP_SIZE="$2"
+      shift 2
+      ;;
+    --n-iter)
+      [ $# -ge 2 ] || fail "Missing value for --n-iter"
+      N_ITER="$2"
+      shift 2
+      ;;
+    --sigmoid-scale)
+      [ $# -ge 2 ] || fail "Missing value for --sigmoid-scale"
+      SIGMOID_SCALE="$2"
+      shift 2
+      ;;
+    --fitness-function)
+      [ $# -ge 2 ] || fail "Missing value for --fitness-function"
+      FITNESS_FUNCTION="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -90,10 +120,10 @@ LINE_COUNT=$(wc -l < "$TASK_LIST")
 [ "$LINE_COUNT" -ge 2 ] || fail "Task list contains no task rows"
 MAX_TASK_INDEX=$((LINE_COUNT - 2))
 
-# Default behavior: 30 runs
+# Default behavior: 20 runs
 if [ "$ALL_MODE" -eq 0 ] && [ -z "$FROM_TASK" ] && [ -z "$TO_TASK" ] && [ -z "$COUNT" ]; then
   FROM_TASK=0
-  COUNT=30
+  COUNT=20
 fi
 
 if [ "$ALL_MODE" -eq 1 ]; then
@@ -134,6 +164,10 @@ echo "Preflight OK"
 echo "Script:        $PYTHON_SCRIPT"
 echo "Task interval: $FROM_TASK-$TO_TASK"
 echo "Total tasks:   $SELECTED_COUNT"
+echo "Pop size:      $POP_SIZE"
+echo "N iter:        $N_ITER"
+echo "Sigmoid scale: $SIGMOID_SCALE"
+echo "Fitness fn:    $FITNESS_FUNCTION"
 echo "Batch size:    50"
 echo "Batches:       $TOTAL_BATCHES (full=$FULL_BATCHES, remainder=$REMAINDER)"
 
@@ -145,7 +179,7 @@ for ((start=FROM_TASK; start<=TO_TASK; start+=50)); do
 
   echo "Submitting array block: ${start}-${end}"
   sbatch \
-    --export=ALL,TASK_FROM="$FROM_TASK",TASK_TO="$TO_TASK",TASK_LIST="$TASK_LIST",PYTHON_SCRIPT="$PYTHON_SCRIPT" \
+    --export=ALL,TASK_FROM="$FROM_TASK",TASK_TO="$TO_TASK",TASK_LIST="$TASK_LIST",PYTHON_SCRIPT="$PYTHON_SCRIPT",POP_SIZE="$POP_SIZE",N_ITER="$N_ITER",SIGMOID_SCALE="$SIGMOID_SCALE",FITNESS_FUNCTION="$FITNESS_FUNCTION" \
     --array="${start}-${end}" \
     "$SLURM_SCRIPT"
 done

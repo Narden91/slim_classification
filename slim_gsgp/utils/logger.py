@@ -23,6 +23,7 @@ import csv
 import os.path
 from copy import copy
 from uuid import UUID
+from datetime import datetime
 
 import pandas as pd
 
@@ -158,3 +159,115 @@ def drop_experiment_from_logger(experiment_id: str or int, log_path: str) -> Non
     to_keep = logger_data[logger_data.iloc[:, 1] != experiment_id]
     # Save the new excluded dataset
     to_keep.to_csv(log_path, index=False, header=None)
+
+
+def append_binary_run_metrics(
+    log_path: str,
+    dataset_name: str,
+    algorithm_name: str,
+    seed: int,
+    training_time_seconds: float,
+    model,
+    X_train,
+    y_train,
+    X_test,
+    y_test,
+    use_sigmoid: bool = True,
+    sigmoid_scale: float = 1.0,
+    additional_info: dict | None = None,
+) -> str | None:
+    """
+    Append train/test binary classification metrics to metrics.csv.
+
+    The metrics file is saved in the algorithm result directory inferred from
+    log_path:
+      - if log_path is .../<algo>/logs/<file>.csv -> .../<algo>/metrics.csv
+      - otherwise -> .../<algo>/metrics.csv
+    """
+    try:
+        import torch
+        from slim_gsgp.classification.metrics import calculate_binary_metrics
+        from slim_gsgp.classification.utils import apply_sigmoid
+    except Exception:
+        return None
+
+    if model is None or X_train is None or y_train is None or X_test is None or y_test is None:
+        return None
+
+    algo_dir = os.path.dirname(log_path)
+    if os.path.basename(algo_dir) == "logs":
+        algo_dir = os.path.dirname(algo_dir)
+    metrics_path = os.path.join(algo_dir, "metrics.csv")
+
+    if not os.path.isdir(algo_dir):
+        os.makedirs(algo_dir, exist_ok=True)
+
+    with torch.no_grad():
+        train_raw = model.predict(X_train).reshape(-1)
+        test_raw = model.predict(X_test).reshape(-1)
+
+        if use_sigmoid:
+            y_train_pred = (apply_sigmoid(train_raw, scaling_factor=sigmoid_scale, _skip_validation=True) >= 0.5).float()
+            y_test_pred = (apply_sigmoid(test_raw, scaling_factor=sigmoid_scale, _skip_validation=True) >= 0.5).float()
+        else:
+            y_train_pred = (train_raw > 0).float()
+            y_test_pred = (test_raw > 0).float()
+
+        y_train_true = y_train.reshape(-1).float()
+        y_test_true = y_test.reshape(-1).float()
+
+        train_metrics = calculate_binary_metrics(y_train_true, y_train_pred)
+        test_metrics = calculate_binary_metrics(y_test_true, y_test_pred)
+
+    row = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "dataset": dataset_name,
+        "algorithm": algorithm_name,
+        "seed": seed,
+        "training_time_seconds": training_time_seconds,
+        "train_accuracy": train_metrics.accuracy,
+        "train_precision": train_metrics.precision,
+        "train_recall": train_metrics.recall,
+        "train_f1": train_metrics.f1,
+        "train_specificity": train_metrics.specificity,
+        "test_accuracy": test_metrics.accuracy,
+        "test_precision": test_metrics.precision,
+        "test_recall": test_metrics.recall,
+        "test_f1": test_metrics.f1,
+        "test_specificity": test_metrics.specificity,
+        "train_true_negatives": train_metrics.true_negatives,
+        "train_false_positives": train_metrics.false_positives,
+        "train_false_negatives": train_metrics.false_negatives,
+        "train_true_positives": train_metrics.true_positives,
+        "test_true_negatives": test_metrics.true_negatives,
+        "test_false_positives": test_metrics.false_positives,
+        "test_false_negatives": test_metrics.false_negatives,
+        "test_true_positives": test_metrics.true_positives,
+        "use_sigmoid": use_sigmoid,
+        "sigmoid_scale": sigmoid_scale,
+    }
+
+    if additional_info:
+        row.update(additional_info)
+
+    preferred_fields = [
+        "timestamp", "dataset", "algorithm", "seed", "training_time_seconds",
+        "train_accuracy", "train_precision", "train_recall", "train_f1", "train_specificity",
+        "test_accuracy", "test_precision", "test_recall", "test_f1", "test_specificity",
+        "train_true_negatives", "train_false_positives", "train_false_negatives", "train_true_positives",
+        "test_true_negatives", "test_false_positives", "test_false_negatives", "test_true_positives",
+        "pop_size", "n_iter", "use_sigmoid", "sigmoid_scale", "fitness_function", "max_depth",
+        "slim_version", "p_inflate", "p_xo", "crossover_operator",
+    ]
+
+    extra_fields = [key for key in row.keys() if key not in preferred_fields]
+    fieldnames = preferred_fields + sorted(extra_fields)
+
+    file_exists = os.path.isfile(metrics_path)
+    with open(metrics_path, "a", newline="") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow({key: row.get(key, "") for key in fieldnames})
+
+    return metrics_path

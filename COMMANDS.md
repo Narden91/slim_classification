@@ -77,6 +77,60 @@ Notes:
 - This launcher enforces interval size as a multiple of 50.
 - Scripts used: `launch_cineca_block50.sh` + `run_experiments_cineca_block50.slurm`.
 
+## Experiments folder (30 runs)
+
+### Local launchers
+
+```bash
+# Optional: activate project venv
+source venv_slim/bin/activate
+
+# Each command runs 30 runs by default (run_id 0..29)
+./launch_exp_1_darwin.sh
+./launch_exp_2_hand_stat.sh
+./launch_exp_3_ablation.sh
+./launch_exp_4_depth_ablation.sh
+```
+
+Optional overrides:
+
+```bash
+# Example: 30 runs starting from run_id 30
+START_RUN=30 N_RUNS=30 ./launch_exp_1_darwin.sh
+
+# Example: quick smoke setup
+POP_SIZE=5 N_ITER=1 N_RUNS=1 ./launch_exp_2_hand_stat.sh
+```
+
+### CINECA launchers (per experiment)
+
+```bash
+# Each command submits 30 array tasks by default (task_id 0..29)
+./launch_cineca_exp_1_darwin.sh
+./launch_cineca_exp_2_hand_stat.sh
+./launch_cineca_exp_3_ablation.sh
+./launch_cineca_exp_4_depth_ablation.sh
+```
+
+Optional overrides:
+
+```bash
+# Example: submit next 30 tasks (30..59)
+FROM_TASK=30 COUNT=30 ./launch_cineca_exp_1_darwin.sh
+```
+
+### Generic CINECA launcher (custom experiment script)
+
+```bash
+# Default behavior (if no range flags): 30 tasks from 0
+./launch_custom_experiments.sh --script experiments/exp_1_darwin.py
+
+# Explicit range/count variants
+./launch_custom_experiments.sh --script experiments/exp_2_hand_stat.py --count 30
+./launch_custom_experiments.sh --script experiments/exp_3_ablation.py --from 0 --to 29
+./launch_custom_experiments.sh --script experiments/exp_4_depth_ablation.py --all
+```
+
 ## Arguments (compact)
 
 ### Selection

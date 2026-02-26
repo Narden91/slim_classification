@@ -119,8 +119,8 @@ def parse_arguments():
                         help="Whether to use sigmoid activation")
     parser.add_argument("--sigmoid-scale", type=float, default=1.0,
                         help="Scaling factor for sigmoid")
-    parser.add_argument("--fitness-function", type=str, default="binary_rmse",
-                        help="Fitness function to use: binary_rmse, binary_mse, binary_mae")
+    parser.add_argument("--fitness-function", type=str, default="binary_cross_entropy",
+                        help="Fitness function to use: binary_cross_entropy, binary_rmse, binary_mse, binary_mae")
 
     # Output control
     parser.add_argument("--verbose", type=bool, default=False,
@@ -224,7 +224,7 @@ def create_default_experiment_config():
         # Classification parameters
         "use_sigmoid": True,
         "sigmoid_scale": 1.0,
-        "fitness_function": "binary_rmse",
+        "fitness_function": "binary_cross_entropy",
 
         # Output control
         "verbose": False,
@@ -332,7 +332,8 @@ def setup_algorithm_params(args, dataset_name):
         'pop_size': args.pop_size,
         'n_iter': args.n_iter,
         'seed': args.seed,
-        'dataset_name': dataset_name
+        'dataset_name': dataset_name,
+        'save_metrics': False,
     }
 
     # Add max_depth for algorithms that support it

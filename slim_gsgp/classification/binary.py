@@ -497,7 +497,7 @@ def train_binary_classifier(
         Threshold for binary classification. Defaults to 0.5.
         Overridden by classifier_config if provided.
     fitness_function : str, optional
-        Fitness function to use. Defaults to 'binary_rmse'.
+        Fitness function to use. Defaults to 'binary_cross_entropy'.
         Overridden by training_config if provided.
     training_config : TrainingConfig, optional
         Training configuration object. If provided, its values take precedence
@@ -597,7 +597,7 @@ def train_binary_classifier(
             kwargs['verbose'] = training_config.verbose
     else:
         final_algorithm = algorithm if algorithm is not None else 'gp'
-        final_fitness = fitness_function if fitness_function is not None else 'binary_rmse'
+        final_fitness = fitness_function if fitness_function is not None else 'binary_cross_entropy'
     
     # Classifier parameters
     if classifier_config is not None:

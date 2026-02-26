@@ -7,6 +7,11 @@ BENCH_DIR="${BENCH_DIR:-slim_gsgp/datasets/benchmark}"
 PYTHON_SCRIPT="${PYTHON_SCRIPT:-slim_gsgp/example_binary_classification.py}"
 VENV_ACTIVATE="${VENV_ACTIVATE:-venv_slim/bin/activate}"
 
+POP_SIZE="${POP_SIZE:-500}"
+N_ITER="${N_ITER:-2000}"
+SIGMOID_SCALE="${SIGMOID_SCALE:-1}"
+FITNESS_FUNCTION="${FITNESS_FUNCTION:-binary_cross_entropy}"
+
 FROM_TASK=""
 TO_TASK=""
 COUNT=""
@@ -26,10 +31,10 @@ fail() {
 usage() {
   cat <<EOF
 Usage:
-  $0 --all [--dry-run]
-  $0 --from N --to M [--dry-run]
-  $0 --from N --count K [--dry-run]
-  $0 --count K [--dry-run]
+  $0 --all [--dry-run] [--pop-size 500 --n-iter 2000 --sigmoid-scale 1 --fitness-function binary_cross_entropy]
+  $0 --from N --to M [--dry-run] [--pop-size 500 --n-iter 2000 --sigmoid-scale 1 --fitness-function binary_cross_entropy]
+  $0 --from N --count K [--dry-run] [--pop-size 500 --n-iter 2000 --sigmoid-scale 1 --fitness-function binary_cross_entropy]
+  $0 --count K [--dry-run] [--pop-size 500 --n-iter 2000 --sigmoid-scale 1 --fitness-function binary_cross_entropy]
 
 Selection modes:
   --all            Launch all task rows in task_list_gsgp.csv
@@ -42,6 +47,12 @@ Batching:
 
 Dry-run:
   --dry-run        Validate everything and print sbatch commands without submitting.
+
+Optional runtime params:
+  --pop-size         Population size (default: 500)
+  --n-iter           Number of generations (default: 2000)
+  --sigmoid-scale    Sigmoid scale (default: 1)
+  --fitness-function Fitness function (default: binary_cross_entropy)
 
 Sanity check:
   A short local GSGP run is executed automatically before sbatch submission.
@@ -73,6 +84,26 @@ while [ $# -gt 0 ]; do
     --count)
       [ $# -ge 2 ] || fail "Missing value for --count"
       COUNT="$2"
+      shift 2
+      ;;
+    --pop-size)
+      [ $# -ge 2 ] || fail "Missing value for --pop-size"
+      POP_SIZE="$2"
+      shift 2
+      ;;
+    --n-iter)
+      [ $# -ge 2 ] || fail "Missing value for --n-iter"
+      N_ITER="$2"
+      shift 2
+      ;;
+    --sigmoid-scale)
+      [ $# -ge 2 ] || fail "Missing value for --sigmoid-scale"
+      SIGMOID_SCALE="$2"
+      shift 2
+      ;;
+    --fitness-function)
+      [ $# -ge 2 ] || fail "Missing value for --fitness-function"
+      FITNESS_FUNCTION="$2"
       shift 2
       ;;
     --dry-run)
@@ -167,6 +198,10 @@ done
 echo "Preflight OK (GSGP)"
 echo "Task interval: $FROM_TASK-$TO_TASK"
 echo "Total tasks:   $SELECTED_COUNT"
+echo "Pop size:      $POP_SIZE"
+echo "N iter:        $N_ITER"
+echo "Sigmoid scale: $SIGMOID_SCALE"
+echo "Fitness fn:    $FITNESS_FUNCTION"
 echo "Batch size:    50"
 echo "Batches:       $TOTAL_BATCHES (full=$FULL_BATCHES, remainder=$REMAINDER)"
 echo "Dry-run:       $DRY_RUN"
@@ -199,6 +234,7 @@ if [ "$DRY_RUN" -eq 0 ] && [ "$SKIP_SANITY" -eq 0 ]; then
     --pop-size="$SANITY_POP_SIZE" \
     --n-iter="$SANITY_N_ITER" \
     --sigmoid-scale="$SANITY_SIGMOID_SCALE" \
+    --fitness-function="$FITNESS_FUNCTION" \
     --seed="$SANITY_SEED" \
     --device="cpu" \
     --verbose="0" \
@@ -219,7 +255,7 @@ for ((start=FROM_TASK; start<=TO_TASK; start+=50)); do
 
   cmd=(
     sbatch
-    --export=ALL,TASK_FROM="$FROM_TASK",TASK_TO="$TO_TASK",TASK_LIST="$TASK_LIST",PYTHON_SCRIPT="$PYTHON_SCRIPT"
+    --export=ALL,TASK_FROM="$FROM_TASK",TASK_TO="$TO_TASK",TASK_LIST="$TASK_LIST",PYTHON_SCRIPT="$PYTHON_SCRIPT",POP_SIZE="$POP_SIZE",N_ITER="$N_ITER",SIGMOID_SCALE="$SIGMOID_SCALE",FITNESS_FUNCTION="$FITNESS_FUNCTION"
     --array="${start}-${end}"
     "$SLURM_SCRIPT"
   )

@@ -119,7 +119,7 @@ class TrainingConfig:
     algorithm : str
         Algorithm to use: 'gp', 'gsgp', or 'slim' (default: 'gp').
     fitness_function : str
-        Fitness function to use (default: 'binary_rmse').
+        Fitness function to use (default: 'binary_cross_entropy').
     pop_size : int
         Population size for evolutionary algorithms (default: 100).
     n_iter : int
@@ -133,14 +133,14 @@ class TrainingConfig:
     --------
     >>> config = TrainingConfig(algorithm='slim', pop_size=50, n_iter=20)
     >>> config.fitness_function
-    'binary_rmse'
+    'binary_cross_entropy'
     
     >>> config = TrainingConfig(seed=42, verbose=0)
     >>> config.algorithm
     'gp'
     """
     algorithm: Literal['gp', 'gsgp', 'slim'] = 'gp'
-    fitness_function: str = 'binary_rmse'
+    fitness_function: str = 'binary_cross_entropy'
     pop_size: int = 100
     n_iter: int = 100
     seed: Optional[int] = None

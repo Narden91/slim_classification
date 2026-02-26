@@ -25,11 +25,12 @@ logging the results for further analysis.
 """
 import uuid
 import os
+import time
 import warnings
 
 from slim_gsgp.algorithms.SLIM_GSGP.slim_gsgp import SLIM_GSGP
 from slim_gsgp.config.slim_config import *
-from slim_gsgp.utils.logger import log_settings
+from slim_gsgp.utils.logger import log_settings, append_binary_run_metrics
 from slim_gsgp.utils.utils import (get_terminals, check_slim_version, validate_inputs, generate_random_uniform,
                                    get_best_min, get_best_max, create_result_directory)
 from slim_gsgp.algorithms.SLIM_GSGP.operators.mutators import inflate_mutation
@@ -75,7 +76,8 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
          profile_cuda_sync: bool = True,
          torch_profile: bool = False,
          torch_profile_steps: int = 2,
-         torch_profile_trace_dir: str | None = None):
+         torch_profile_trace_dir: str | None = None,
+         save_metrics: bool = True):
     """
     Main function to execute the SLIM GSGP algorithm on specified datasets.
 
@@ -326,6 +328,7 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     #       Running the Algorithm
     # ================================
 
+    training_start = time.time()
     optimizer = SLIM_GSGP(
         pi_init=slim_gsgp_pi_init,
         **slim_gsgp_parameters
@@ -339,8 +342,35 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
         curr_dataset=dataset_name,
         **slim_gsgp_solve_parameters
     )
+    training_time = time.time() - training_start
 
     optimizer.elite.version = slim_version
+
+    if save_metrics:
+        append_binary_run_metrics(
+            log_path=log_path,
+            dataset_name=dataset_name,
+            algorithm_name=f"slim_{slim_version}",
+            seed=seed,
+            training_time_seconds=training_time,
+            model=optimizer.elite,
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            y_test=y_test,
+            use_sigmoid=True,
+            sigmoid_scale=1.0,
+            additional_info={
+                "pop_size": pop_size,
+                "n_iter": n_iter,
+                "fitness_function": fitness_function,
+                "max_depth": max_depth,
+                "slim_version": slim_version,
+                "p_inflate": p_inflate,
+                "p_xo": p_xo,
+                "crossover_operator": crossover_operator,
+            },
+        )
 
     return optimizer.elite
 

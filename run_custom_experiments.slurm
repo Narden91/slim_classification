@@ -42,6 +42,10 @@ PYTHON_SCRIPT="${PYTHON_SCRIPT:-}"
 TASK_LIST="${TASK_LIST:-config/experiments_task_list.csv}"
 TASK_FROM="${TASK_FROM:-0}"
 TASK_TO="${TASK_TO:-0}"
+POP_SIZE="${POP_SIZE:-500}"
+N_ITER="${N_ITER:-2000}"
+SIGMOID_SCALE="${SIGMOID_SCALE:-1}"
+FITNESS_FUNCTION="${FITNESS_FUNCTION:-binary_cross_entropy}"
 
 if [ -z "$PYTHON_SCRIPT" ]; then
     echo "ERROR: PYTHON_SCRIPT not set"
@@ -118,6 +122,10 @@ echo "SLIM Version:     $SLIM_VERSION"
 echo "Run Number:       $RUN_NUMBER"
 echo "Seed / Run ID:    $SEED"
 echo "Output Directory: $OUT_DIR"
+echo "Population Size:  $POP_SIZE"
+echo "Generations:      $N_ITER"
+echo "Sigmoid Scale:    $SIGMOID_SCALE"
+echo "Fitness Function: $FITNESS_FUNCTION"
 echo "================================================"
 
 echo "Running custom python experiment..."
@@ -128,6 +136,10 @@ START_TIME=$(date +%s)
 python "$PYTHON_SCRIPT" \
     --run_id="$SEED" \
     --output_dir="$OUT_DIR" \
+    --pop_size="$POP_SIZE" \
+    --n_iter="$N_ITER" \
+    --sigmoid-scale="$SIGMOID_SCALE" \
+    --fitness-function="$FITNESS_FUNCTION" \
     > "$LOG_FILE" 2>&1
 
 EXIT_CODE=$?

@@ -38,10 +38,11 @@ PYTHON_SCRIPT="${PYTHON_SCRIPT:-slim_gsgp/example_binary_classification.py}"
 TASK_FROM="${TASK_FROM:-0}"
 TASK_TO="${TASK_TO:-0}"
 
-POP_SIZE=500
-N_ITER=2000
-SIGMOID_SCALE=0.01
-ALGORITHM="gsgp"
+POP_SIZE="${POP_SIZE:-500}"
+N_ITER="${N_ITER:-2000}"
+SIGMOID_SCALE="${SIGMOID_SCALE:-1}"
+FITNESS_FUNCTION="${FITNESS_FUNCTION:-binary_cross_entropy}"
+ALGORITHM="${ALGORITHM:-gsgp}"
 
 if [ ! -f "$TASK_LIST" ]; then
     echo "ERROR: Task list file not found: $TASK_LIST"
@@ -106,6 +107,8 @@ echo "Seed:            $SEED"
 echo "Run Number:      $RUN_NUMBER"
 echo "Population Size: $POP_SIZE"
 echo "Iterations:      $N_ITER"
+echo "Sigmoid Scale:   $SIGMOID_SCALE"
+echo "Fitness Function:$FITNESS_FUNCTION"
 echo "================================================"
 
 LOG_DIR="logs_gsgp_flexible/${DATASET}/${ALGORITHM}"
@@ -125,6 +128,7 @@ python "$PYTHON_SCRIPT" \
     --pop-size="$POP_SIZE" \
     --n-iter="$N_ITER" \
     --sigmoid-scale="$SIGMOID_SCALE" \
+    --fitness-function="$FITNESS_FUNCTION" \
     --seed="$SEED" \
     > "$LOG_FILE" 2>&1
 

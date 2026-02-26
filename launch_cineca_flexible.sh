@@ -7,6 +7,13 @@ BENCH_DIR="${BENCH_DIR:-slim_gsgp/datasets/benchmark}"
 PYTHON_SCRIPT="${PYTHON_SCRIPT:-slim_gsgp/example_binary_classification.py}"
 VENV_ACTIVATE="${VENV_ACTIVATE:-venv_slim/bin/activate}"
 
+POP_SIZE="${POP_SIZE:-500}"
+N_ITER="${N_ITER:-2000}"
+MAX_DEPTH="${MAX_DEPTH:-None}"
+P_INFLATE="${P_INFLATE:-0.7}"
+SIGMOID_SCALE="${SIGMOID_SCALE:-1}"
+FITNESS_FUNCTION="${FITNESS_FUNCTION:-binary_cross_entropy}"
+
 FROM_TASK=""
 TO_TASK=""
 COUNT=""
@@ -20,10 +27,10 @@ fail() {
 usage() {
   cat <<EOF
 Usage:
-  $0 --all
-  $0 --from N --to M
-  $0 --from N --count K
-  $0 --count K
+  $0 --all [--pop-size 500 --n-iter 2000 --sigmoid-scale 1 --fitness-function binary_cross_entropy]
+  $0 --from N --to M [--pop-size 500 --n-iter 2000 --sigmoid-scale 1 --fitness-function binary_cross_entropy]
+  $0 --from N --count K [--pop-size 500 --n-iter 2000 --sigmoid-scale 1 --fitness-function binary_cross_entropy]
+  $0 --count K [--pop-size 500 --n-iter 2000 --sigmoid-scale 1 --fitness-function binary_cross_entropy]
 
 Selection modes:
   --all            Launch all task rows in task_list.csv
@@ -39,6 +46,14 @@ Examples:
   $0 --from 0 --to 249
   $0 --from 250 --count 1023
   $0 --count 1023
+
+Optional runtime params:
+  --pop-size         Population size (default: 500)
+  --n-iter           Number of generations (default: 2000)
+  --max-depth        Max depth passed to python script (default: None)
+  --p-inflate        SLIM p-inflate value (default: 0.7)
+  --sigmoid-scale    Sigmoid scale (default: 1)
+  --fitness-function Fitness function (default: binary_cross_entropy)
 EOF
 }
 
@@ -61,6 +76,36 @@ while [ $# -gt 0 ]; do
     --count)
       [ $# -ge 2 ] || fail "Missing value for --count"
       COUNT="$2"
+      shift 2
+      ;;
+    --pop-size)
+      [ $# -ge 2 ] || fail "Missing value for --pop-size"
+      POP_SIZE="$2"
+      shift 2
+      ;;
+    --n-iter)
+      [ $# -ge 2 ] || fail "Missing value for --n-iter"
+      N_ITER="$2"
+      shift 2
+      ;;
+    --max-depth)
+      [ $# -ge 2 ] || fail "Missing value for --max-depth"
+      MAX_DEPTH="$2"
+      shift 2
+      ;;
+    --p-inflate)
+      [ $# -ge 2 ] || fail "Missing value for --p-inflate"
+      P_INFLATE="$2"
+      shift 2
+      ;;
+    --sigmoid-scale)
+      [ $# -ge 2 ] || fail "Missing value for --sigmoid-scale"
+      SIGMOID_SCALE="$2"
+      shift 2
+      ;;
+    --fitness-function)
+      [ $# -ge 2 ] || fail "Missing value for --fitness-function"
+      FITNESS_FUNCTION="$2"
       shift 2
       ;;
     -h|--help)
@@ -147,6 +192,12 @@ done
 echo "Preflight OK"
 echo "Task interval: $FROM_TASK-$TO_TASK"
 echo "Total tasks:   $SELECTED_COUNT"
+echo "Pop size:      $POP_SIZE"
+echo "N iter:        $N_ITER"
+echo "Max depth:     $MAX_DEPTH"
+echo "P inflate:     $P_INFLATE"
+echo "Sigmoid scale: $SIGMOID_SCALE"
+echo "Fitness fn:    $FITNESS_FUNCTION"
 echo "Batch size:    50"
 echo "Batches:       $TOTAL_BATCHES (full=$FULL_BATCHES, remainder=$REMAINDER)"
 
@@ -158,7 +209,7 @@ for ((start=FROM_TASK; start<=TO_TASK; start+=50)); do
 
   echo "Submitting array block: ${start}-${end}"
   sbatch \
-    --export=ALL,TASK_FROM="$FROM_TASK",TASK_TO="$TO_TASK",TASK_LIST="$TASK_LIST",PYTHON_SCRIPT="$PYTHON_SCRIPT" \
+    --export=ALL,TASK_FROM="$FROM_TASK",TASK_TO="$TO_TASK",TASK_LIST="$TASK_LIST",PYTHON_SCRIPT="$PYTHON_SCRIPT",POP_SIZE="$POP_SIZE",N_ITER="$N_ITER",MAX_DEPTH="$MAX_DEPTH",P_INFLATE="$P_INFLATE",SIGMOID_SCALE="$SIGMOID_SCALE",FITNESS_FUNCTION="$FITNESS_FUNCTION" \
     --array="${start}-${end}" \
     "$SLURM_SCRIPT"
 done

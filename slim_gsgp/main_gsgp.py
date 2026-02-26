@@ -26,13 +26,14 @@ logging the results for further analysis.
 
 import uuid
 import os
+import time
 import warnings
 
 import torch
 
 from slim_gsgp.algorithms.GSGP.gsgp import GSGP
 from slim_gsgp.config.gsgp_config import *
-from slim_gsgp.utils.logger import log_settings
+from slim_gsgp.utils.logger import log_settings, append_binary_run_metrics
 from slim_gsgp.utils.utils import get_terminals, validate_inputs, generate_random_uniform, create_result_directory
 from typing import Callable
 
@@ -60,7 +61,8 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
          tree_constants: list = [float(key.replace("constant_", "").replace("_", "-")) for key in CONSTANTS],
          n_jobs: int = gsgp_solve_parameters["n_jobs"],
          tournament_size: int = 2,
-         test_elite: bool = gsgp_solve_parameters["test_elite"]):
+         test_elite: bool = gsgp_solve_parameters["test_elite"],
+         save_metrics: bool = True):
     """
     Main function to execute the Standard GSGP algorithm on specified datasets
 
@@ -263,6 +265,7 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     #       Running the Algorithm
     # ================================
 
+    training_start = time.time()
     optimizer = GSGP(pi_init=gsgp_pi_init, **gsgp_parameters)
     
     optimizer.solve(
@@ -273,6 +276,7 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
         curr_dataset=dataset_name,
         **gsgp_solve_parameters,
     )
+    training_time = time.time() - training_start
 
     log_settings(
         path=log_path[:-4] + "_settings.csv",
@@ -282,6 +286,29 @@ def gsgp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
                        settings_dict],
         unique_run_id=unique_run_id,
     )
+
+    if save_metrics:
+        append_binary_run_metrics(
+            log_path=log_path,
+            dataset_name=dataset_name,
+            algorithm_name="gsgp",
+            seed=seed,
+            training_time_seconds=training_time,
+            model=optimizer.elite,
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            y_test=y_test,
+            use_sigmoid=True,
+            sigmoid_scale=1.0,
+            additional_info={
+                "pop_size": pop_size,
+                "n_iter": n_iter,
+                "fitness_function": fitness_function,
+                "max_depth": None,
+            },
+        )
+
     return optimizer.elite
 
 

@@ -47,13 +47,14 @@ PYTHON_SCRIPT="${PYTHON_SCRIPT:-slim_gsgp/example_binary_classification.py}"
 TASK_FROM="${TASK_FROM:-0}"
 TASK_TO="${TASK_TO:-0}"
 
-# Fixed experiment configuration
-POP_SIZE=500
-N_ITER=2000
-MAX_DEPTH="None"
-P_INFLATE=0.7
-SIGMOID_SCALE=0.01
-ALGORITHM="slim"
+# Experiment configuration (can be overridden by launcher exports)
+POP_SIZE="${POP_SIZE:-500}"
+N_ITER="${N_ITER:-2000}"
+MAX_DEPTH="${MAX_DEPTH:-None}"
+P_INFLATE="${P_INFLATE:-0.7}"
+SIGMOID_SCALE="${SIGMOID_SCALE:-1}"
+FITNESS_FUNCTION="${FITNESS_FUNCTION:-binary_cross_entropy}"
+ALGORITHM="${ALGORITHM:-slim}"
 
 # ── Task list validation ─────────────────────────────────────────────────────
 if [ ! -f "$TASK_LIST" ]; then
@@ -126,6 +127,10 @@ echo "Seed:            $SEED"
 echo "Run Number:      $RUN_NUMBER"
 echo "Population Size: $POP_SIZE"
 echo "Iterations:      $N_ITER"
+echo "Max Depth:       $MAX_DEPTH"
+echo "P Inflate:       $P_INFLATE"
+echo "Sigmoid Scale:   $SIGMOID_SCALE"
+echo "Fitness Function:$FITNESS_FUNCTION"
 echo "================================================"
 
 # ── Output directories ───────────────────────────────────────────────────────
@@ -150,6 +155,7 @@ python "$PYTHON_SCRIPT" \
     --max-depth="$MAX_DEPTH" \
     --p-inflate="$P_INFLATE" \
     --sigmoid-scale="$SIGMOID_SCALE" \
+    --fitness-function="$FITNESS_FUNCTION" \
     --seed="$SEED" \
     > "$LOG_FILE" 2>&1
 

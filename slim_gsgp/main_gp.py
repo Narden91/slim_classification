@@ -25,13 +25,14 @@ logging the results for further analysis.
 """
 import uuid
 import os
+import time
 import warnings
 from slim_gsgp.algorithms.GP.gp import GP
 from slim_gsgp.algorithms.GP.operators.mutators import mutate_tree_subtree
 from slim_gsgp.algorithms.GP.representations.tree_utils import tree_depth
 from slim_gsgp.config.gp_config import *
 from slim_gsgp.selection.selection_algorithms import tournament_selection_max, tournament_selection_min
-from slim_gsgp.utils.logger import log_settings
+from slim_gsgp.utils.logger import log_settings, append_binary_run_metrics
 from slim_gsgp.utils.utils import (get_terminals, validate_inputs, get_best_max, get_best_min, create_result_directory)
 
 
@@ -54,7 +55,8 @@ def gp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None
        tree_functions: list = list(FUNCTIONS.keys()),
        tree_constants: list = [float(key.replace("constant_", "").replace("_", "-")) for key in CONSTANTS],
        tournament_size: int = 2,
-       test_elite: bool = gp_solve_parameters["test_elite"]):
+             test_elite: bool = gp_solve_parameters["test_elite"],
+             save_metrics: bool = True):
     """
     Main function to execute the StandardGP algorithm on specified datasets
 
@@ -243,6 +245,7 @@ def gp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None
     #       Running the Algorithm
     # ================================
 
+    training_start = time.time()
     optimizer = GP(pi_init=gp_pi_init, **gp_parameters)
     optimizer.solve(
         X_train=X_train,
@@ -252,6 +255,7 @@ def gp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None
         curr_dataset=dataset_name,
         **gp_solve_parameters
     )
+    training_time = time.time() - training_start
 
     log_settings(
         path=log_path[:-4] + "_settings.csv",
@@ -261,6 +265,28 @@ def gp(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = None
                        settings_dict],
         unique_run_id=unique_run_id,
     )
+
+    if save_metrics:
+        append_binary_run_metrics(
+            log_path=log_path,
+            dataset_name=dataset_name,
+            algorithm_name="gp",
+            seed=seed,
+            training_time_seconds=training_time,
+            model=optimizer.elite,
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            y_test=y_test,
+            use_sigmoid=True,
+            sigmoid_scale=1.0,
+            additional_info={
+                "pop_size": pop_size,
+                "n_iter": n_iter,
+                "fitness_function": fitness_function,
+                "max_depth": max_depth,
+            },
+        )
 
     return optimizer.elite
 

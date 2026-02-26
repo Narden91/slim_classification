@@ -12,7 +12,15 @@ from experiments import exp_2_hand_stat
 from experiments import exp_3_ablation
 from experiments import exp_4_depth_ablation
 
-def run_all(n_runs=30, start_run=0, selected_experiments=None, pop_size=100, n_iter=100):
+def run_all(
+    n_runs=20,
+    start_run=0,
+    selected_experiments=None,
+    pop_size=500,
+    n_iter=2000,
+    sigmoid_scale=1.0,
+    fitness_function="binary_cross_entropy",
+):
     
     experiments_map = {
         1: ("Experiment 1 (DARWIN)", exp_1_darwin, "exp1_darwin"),
@@ -48,7 +56,9 @@ def run_all(n_runs=30, start_run=0, selected_experiments=None, pop_size=100, n_i
                     run_id=run_id,
                     output_dir=output_dir,
                     pop_size=pop_size,
-                    n_iter=n_iter
+                    n_iter=n_iter,
+                    sigmoid_scale=sigmoid_scale,
+                    fitness_function=fitness_function,
                 )
                 print(f"✓ {exp_name} completed for Run {run_id}")
             except Exception as e:
@@ -60,10 +70,12 @@ def run_all(n_runs=30, start_run=0, selected_experiments=None, pop_size=100, n_i
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run SLIM Classification Experiments")
     parser.add_argument("--experiments", type=str, default="1,2,3,4", help="Comma-separated list of experiment IDs to run (e.g., '1,2')")
-    parser.add_argument("--n_runs", type=int, default=30, help="Number of runs to execute per experiment")
+    parser.add_argument("--n_runs", type=int, default=20, help="Number of runs to execute per experiment")
     parser.add_argument("--start_run", type=int, default=0, help="Starting Run ID")
-    parser.add_argument("--pop_size", type=int, default=100, help="Population size for all experiments")
-    parser.add_argument("--n_iter", type=int, default=100, help="Number of iterations for all experiments")
+    parser.add_argument("--pop_size", type=int, default=500, help="Population size for all experiments")
+    parser.add_argument("--n_iter", type=int, default=2000, help="Number of iterations for all experiments")
+    parser.add_argument("--sigmoid_scale", type=float, default=1.0, help="Sigmoid scaling factor")
+    parser.add_argument("--fitness_function", type=str, default="binary_cross_entropy", help="Fitness function")
     
     args = parser.parse_args()
     
@@ -74,5 +86,7 @@ if __name__ == "__main__":
         start_run=args.start_run,
         selected_experiments=selected_exps,
         pop_size=args.pop_size,
-        n_iter=args.n_iter
+        n_iter=args.n_iter,
+        sigmoid_scale=args.sigmoid_scale,
+        fitness_function=args.fitness_function,
     )

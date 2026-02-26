@@ -7,59 +7,147 @@ set -euo pipefail
 
 SLURM_SCRIPT="run_custom_experiments.slurm"
 TASK_LIST="config/experiments_task_list.csv"
+PYTHON_SCRIPT=""
+
+FROM_TASK=""
+TO_TASK=""
+COUNT=""
+ALL_MODE=0
+
+fail() {
+  echo "ERROR: $1" >&2
+  exit 1
+}
 
 usage() {
   cat <<EOF
 Usage:
-  $0 --script <path_to_experiment_script.py> [--count N]
-
-Example: 
   $0 --script experiments/exp_1_darwin.py --count 30
+  $0 --script experiments/exp_2_hand_stat.py --all
+  $0 --script experiments/exp_3_ablation.py --from 0 --to 29
 
-Description:
-  Launches a SLURM array job for the custom publication experiments located 
-  in the experiments/ folder. By default, reads 30 seeds from the task list.
+Selection modes:
+  --all            Launch all task rows in experiments_task_list.csv
+  --from/--to      Launch inclusive task-id interval [N, M]
+  --count          Launch K tasks starting from --from (default: 0)
+
+Defaults:
+  If no selection mode is provided, this launcher runs --count 30 from --from 0.
+
+Batching:
+  Tasks are submitted in batches of 50 via multiple sbatch array calls.
 EOF
-  exit 1
 }
-
-SCRIPT_PATH=""
-COUNT=30
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --script)
-      SCRIPT_PATH="$2"
+      [ $# -ge 2 ] || fail "Missing value for --script"
+      PYTHON_SCRIPT="$2"
+      shift 2
+      ;;
+    --all)
+      ALL_MODE=1
+      shift
+      ;;
+    --from)
+      [ $# -ge 2 ] || fail "Missing value for --from"
+      FROM_TASK="$2"
+      shift 2
+      ;;
+    --to)
+      [ $# -ge 2 ] || fail "Missing value for --to"
+      TO_TASK="$2"
       shift 2
       ;;
     --count)
+      [ $# -ge 2 ] || fail "Missing value for --count"
       COUNT="$2"
       shift 2
       ;;
     -h|--help)
       usage
+      exit 0
       ;;
     *)
-      echo "Unknown argument: $1"
-      usage
+      fail "Unknown argument: $1"
       ;;
   esac
 done
 
-[ -z "$SCRIPT_PATH" ] && usage
-[ -f "$SCRIPT_PATH" ] || { echo "ERROR: Script not found: $SCRIPT_PATH"; exit 1; }
-[ -f "$SLURM_SCRIPT" ] || { echo "ERROR: SLURM script not found: $SLURM_SCRIPT"; exit 1; }
-[ -f "$TASK_LIST" ] || { echo "ERROR: Task list not found: $TASK_LIST"; exit 1; }
+[ -n "$PYTHON_SCRIPT" ] || fail "--script is required"
+[ -f "$PYTHON_SCRIPT" ] || fail "Script not found: $PYTHON_SCRIPT"
+[ -f "$SLURM_SCRIPT" ] || fail "SLURM script not found: $SLURM_SCRIPT"
+[ -f "$TASK_LIST" ] || fail "Task list not found: $TASK_LIST"
 
-MAX_TASK=$((COUNT - 1))
+if ! command -v sbatch >/dev/null 2>&1; then
+  fail "sbatch not found in PATH; run on a login node"
+fi
 
-echo "Submitting array for $COUNT tasks (0 to $MAX_TASK)..."
-echo "Target Python Script: $SCRIPT_PATH"
+bash -n "$SLURM_SCRIPT" || fail "SLURM script has syntax errors"
 
-# Dispatch to SLURM seamlessly
-sbatch \
-  --export=ALL,PYTHON_SCRIPT="$SCRIPT_PATH",TASK_LIST="$TASK_LIST" \
-  --array="0-${MAX_TASK}" \
-  "$SLURM_SCRIPT"
+LINE_COUNT=$(wc -l < "$TASK_LIST")
+[ "$LINE_COUNT" -ge 2 ] || fail "Task list contains no task rows"
+MAX_TASK_INDEX=$((LINE_COUNT - 2))
 
-echo "Done."
+# Default behavior: 30 runs
+if [ "$ALL_MODE" -eq 0 ] && [ -z "$FROM_TASK" ] && [ -z "$TO_TASK" ] && [ -z "$COUNT" ]; then
+  FROM_TASK=0
+  COUNT=30
+fi
+
+if [ "$ALL_MODE" -eq 1 ]; then
+  [ -z "$FROM_TASK" ] || fail "--all cannot be combined with --from"
+  [ -z "$TO_TASK" ] || fail "--all cannot be combined with --to"
+  [ -z "$COUNT" ] || fail "--all cannot be combined with --count"
+  FROM_TASK=0
+  TO_TASK="$MAX_TASK_INDEX"
+else
+  if [ -n "$COUNT" ]; then
+    [[ "$COUNT" =~ ^[0-9]+$ ]] || fail "--count must be a non-negative integer"
+    [ "$COUNT" -gt 0 ] || fail "--count must be greater than 0"
+
+    if [ -z "$FROM_TASK" ]; then
+      FROM_TASK=0
+    fi
+    [[ "$FROM_TASK" =~ ^[0-9]+$ ]] || fail "--from must be a non-negative integer"
+    [ -z "$TO_TASK" ] || fail "Use either --to or --count, not both"
+
+    TO_TASK=$((FROM_TASK + COUNT - 1))
+  else
+    [ -n "$FROM_TASK" ] || fail "Specify one mode: --all OR --count [--from N] OR --from N --to M"
+    [ -n "$TO_TASK" ] || fail "When using --from without --count, --to is required"
+    [[ "$FROM_TASK" =~ ^[0-9]+$ ]] || fail "--from must be a non-negative integer"
+    [[ "$TO_TASK" =~ ^[0-9]+$ ]] || fail "--to must be a non-negative integer"
+  fi
+fi
+
+[ "$FROM_TASK" -le "$TO_TASK" ] || fail "Invalid interval: --from must be <= --to"
+[ "$TO_TASK" -le "$MAX_TASK_INDEX" ] || fail "Requested to-task ($TO_TASK) exceeds available max task index ($MAX_TASK_INDEX)"
+
+SELECTED_COUNT=$((TO_TASK - FROM_TASK + 1))
+FULL_BATCHES=$((SELECTED_COUNT / 50))
+REMAINDER=$((SELECTED_COUNT % 50))
+TOTAL_BATCHES=$((FULL_BATCHES + (REMAINDER > 0 ? 1 : 0)))
+
+echo "Preflight OK"
+echo "Script:        $PYTHON_SCRIPT"
+echo "Task interval: $FROM_TASK-$TO_TASK"
+echo "Total tasks:   $SELECTED_COUNT"
+echo "Batch size:    50"
+echo "Batches:       $TOTAL_BATCHES (full=$FULL_BATCHES, remainder=$REMAINDER)"
+
+for ((start=FROM_TASK; start<=TO_TASK; start+=50)); do
+  end=$((start + 49))
+  if [ "$end" -gt "$TO_TASK" ]; then
+    end="$TO_TASK"
+  fi
+
+  echo "Submitting array block: ${start}-${end}"
+  sbatch \
+    --export=ALL,TASK_FROM="$FROM_TASK",TASK_TO="$TO_TASK",TASK_LIST="$TASK_LIST",PYTHON_SCRIPT="$PYTHON_SCRIPT" \
+    --array="${start}-${end}" \
+    "$SLURM_SCRIPT"
+done
+
+echo "Submission complete."

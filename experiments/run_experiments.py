@@ -12,13 +12,13 @@ from experiments import exp_2_hand_stat
 from experiments import exp_3_ablation
 from experiments import exp_4_depth_ablation
 
-def run_all(n_runs=30, start_run=0, selected_experiments=None, n_jobs=1):
+def run_all(n_runs=30, start_run=0, selected_experiments=None, pop_size=100, n_iter=100):
     
     experiments_map = {
-        1: ("Experiment 1 (DARWIN)", exp_1_darwin),
-        2: ("Experiment 2 (HAND_STAT)", exp_2_hand_stat),
-        3: ("Experiment 3 (Ablation p_inflate)", exp_3_ablation),
-        4: ("Experiment 4 (Ablation init_depth)", exp_4_depth_ablation)
+        1: ("Experiment 1 (DARWIN)", exp_1_darwin, "exp1_darwin"),
+        2: ("Experiment 2 (HAND_STAT)", exp_2_hand_stat, "exp2_hand_stat"),
+        3: ("Experiment 3 (Ablation p_inflate)", exp_3_ablation, "exp3_ablation"),
+        4: ("Experiment 4 (Ablation init_depth)", exp_4_depth_ablation, "exp4_depth_ablation")
     }
     
     if selected_experiments is None:
@@ -32,11 +32,10 @@ def run_all(n_runs=30, start_run=0, selected_experiments=None, n_jobs=1):
                 print(f"Warning: Experiment {exp_id} not found. Skipping.")
                 continue
                 
-            exp_name, exp_module = experiments_map[exp_id]
+            exp_name, exp_module, output_subdir = experiments_map[exp_id]
             print(f"\n--- Running {exp_name} ---")
             
-            # Define output directory based on experiment
-            output_dir = os.path.join("experiment_results", f"exp{exp_id}_{exp_module.__name__.split('_')[-1]}")
+            output_dir = os.path.join("experiment_results", output_subdir)
             
             # Run the experiment
             # Note: pop_size and n_iter are defaulted in the specific scripts to 100/100
@@ -45,7 +44,12 @@ def run_all(n_runs=30, start_run=0, selected_experiments=None, n_jobs=1):
             # But for full reproduction, we pass only run_id and output_dir, letting defaults handle the rest.
             
             try:
-                exp_module.run_experiment(run_id=run_id, output_dir=output_dir)
+                exp_module.run_experiment(
+                    run_id=run_id,
+                    output_dir=output_dir,
+                    pop_size=pop_size,
+                    n_iter=n_iter
+                )
                 print(f"✓ {exp_name} completed for Run {run_id}")
             except Exception as e:
                 print(f"❌ {exp_name} FAILED for Run {run_id}")
@@ -56,11 +60,19 @@ def run_all(n_runs=30, start_run=0, selected_experiments=None, n_jobs=1):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run SLIM Classification Experiments")
     parser.add_argument("--experiments", type=str, default="1,2,3,4", help="Comma-separated list of experiment IDs to run (e.g., '1,2')")
-    parser.add_argument("--n_runs", type=int, default=1, help="Number of runs to execute per experiment")
+    parser.add_argument("--n_runs", type=int, default=30, help="Number of runs to execute per experiment")
     parser.add_argument("--start_run", type=int, default=0, help="Starting Run ID")
+    parser.add_argument("--pop_size", type=int, default=100, help="Population size for all experiments")
+    parser.add_argument("--n_iter", type=int, default=100, help="Number of iterations for all experiments")
     
     args = parser.parse_args()
     
     selected_exps = [int(x.strip()) for x in args.experiments.split(',') if x.strip()]
     
-    run_all(n_runs=args.n_runs, start_run=args.start_run, selected_experiments=selected_exps)
+    run_all(
+        n_runs=args.n_runs,
+        start_run=args.start_run,
+        selected_experiments=selected_exps,
+        pop_size=args.pop_size,
+        n_iter=args.n_iter
+    )

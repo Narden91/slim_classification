@@ -38,21 +38,69 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export PYTHONUNBUFFERED=1
 
 # Variables exported from bash launcher
-PYTHON_SCRIPT="${PYTHON_SCRIPT}"
+PYTHON_SCRIPT="${PYTHON_SCRIPT:-}"
 TASK_LIST="${TASK_LIST:-config/experiments_task_list.csv}"
+TASK_FROM="${TASK_FROM:-0}"
+TASK_TO="${TASK_TO:-0}"
 
-if [ ! -f "$TASK_LIST" ] || [ ! -f "$PYTHON_SCRIPT" ]; then
-    echo "ERROR: Missing task list or python script."
+if [ -z "$PYTHON_SCRIPT" ]; then
+    echo "ERROR: PYTHON_SCRIPT not set"
+    exit 1
+fi
+
+if [ ! -f "$TASK_LIST" ]; then
+    echo "ERROR: Task list file not found: $TASK_LIST"
+    exit 1
+fi
+
+if [ ! -f "$PYTHON_SCRIPT" ]; then
+    echo "ERROR: Python script not found: $PYTHON_SCRIPT"
+    exit 1
+fi
+
+if ! [[ "$TASK_FROM" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: TASK_FROM must be a non-negative integer (got: $TASK_FROM)"
+    exit 1
+fi
+
+if ! [[ "$TASK_TO" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: TASK_TO must be a non-negative integer (got: $TASK_TO)"
+    exit 1
+fi
+
+if [ "$TASK_FROM" -gt "$TASK_TO" ]; then
+    echo "ERROR: TASK_FROM must be <= TASK_TO (got TASK_FROM=$TASK_FROM TASK_TO=$TASK_TO)"
+    exit 1
+fi
+
+if [ "$SLURM_ARRAY_TASK_ID" -lt "$TASK_FROM" ] || [ "$SLURM_ARRAY_TASK_ID" -gt "$TASK_TO" ]; then
+    echo "ERROR: Task ID out of range (${TASK_FROM}-${TASK_TO}): $SLURM_ARRAY_TASK_ID"
+    exit 1
+fi
+
+LINE_COUNT=$(wc -l < "$TASK_LIST")
+MAX_TASK_INDEX=$((LINE_COUNT - 2))
+if [ "$SLURM_ARRAY_TASK_ID" -gt "$MAX_TASK_INDEX" ]; then
+    echo "ERROR: Task ID exceeds task list max index ($MAX_TASK_INDEX): $SLURM_ARRAY_TASK_ID"
     exit 1
 fi
 
 # ── Parse CSV line (header ignored) ──
 LINE_NUM=$((SLURM_ARRAY_TASK_ID + 2))
 TASK_CONFIG=$(sed -n "${LINE_NUM}p" "$TASK_LIST")
+if [ -z "$TASK_CONFIG" ]; then
+    echo "ERROR: Could not read task configuration for task ID $SLURM_ARRAY_TASK_ID"
+    exit 1
+fi
+
 IFS=',' read -r TASK_ID DATASET SLIM_VERSION SEED RUN_NUMBER <<< "$TASK_CONFIG"
 
 # Strip formatting chars
+TASK_ID=$(echo "$TASK_ID" | tr -d '\r' | xargs)
+DATASET=$(echo "$DATASET" | tr -d '\r' | xargs)
+SLIM_VERSION=$(echo "$SLIM_VERSION" | tr -d '\r' | xargs)
 SEED=$(echo "$SEED" | tr -d '\r' | xargs)
+RUN_NUMBER=$(echo "$RUN_NUMBER" | tr -d '\r' | xargs)
 SCRIPT_NAME=$(basename "$PYTHON_SCRIPT" .py)
 
 # ── Output directories ───────────────────────────────────────────────────────
@@ -64,6 +112,10 @@ LOG_FILE="${LOG_DIR}/run_seed_${SEED}.log"
 OUT_DIR="results/experiments/${SCRIPT_NAME}"
 
 echo "Script:           $PYTHON_SCRIPT"
+echo "Task ID:          $TASK_ID"
+echo "Dataset:          $DATASET"
+echo "SLIM Version:     $SLIM_VERSION"
+echo "Run Number:       $RUN_NUMBER"
 echo "Seed / Run ID:    $SEED"
 echo "Output Directory: $OUT_DIR"
 echo "================================================"

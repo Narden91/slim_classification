@@ -11,6 +11,8 @@ import time
 sys.path.append(os.getcwd())
 
 from slim_gsgp.datasets.data_loader import load_darwin
+from slim_gsgp.main_gp import gp
+from slim_gsgp.main_gsgp import gsgp
 from slim_gsgp.main_slim import slim
 from slim_gsgp.utils.utils import train_test_split
 from slim_gsgp.evaluators.fitness_functions import rmse
@@ -26,6 +28,7 @@ def set_seed(seed):
 def run_experiment(run_id, output_dir, pop_size=100, n_iter=100):
     
     dataset_name = "darwin"
+    algorithms = ["GP", "GSGP", "SLIM"]
     # Ablation: Varying p_inflate (Probability of Inflation Mutation)
     # Default is usually 0.2. We test 0.2, 0.5, 0.8.
     p_inflate_values = [0.2, 0.5, 0.8]
@@ -41,63 +44,101 @@ def run_experiment(run_id, output_dir, pop_size=100, n_iter=100):
     
     results = []
 
-    for p_inflate in p_inflate_values:
-        variant_name = f"SLIM_p_inflate_{p_inflate}"
-        print(f"[{variant_name}] Running on {dataset_name} | Run: {run_id}")
-        log_path = os.path.join(output_dir, f"{variant_name}_{dataset_name}_run_{run_id}.csv")
-        
-        start_time = time.time()
-        
-        # Run SLIM with specific p_inflate
-        final_model = slim(
-            X_train=X_train, y_train=y_train,
-            X_test=X_test, y_test=y_test,
-            dataset_name=dataset_name,
-            slim_version="SLIM+SIG2",
-            pop_size=pop_size,
-            n_iter=n_iter,
-            p_xo=0.0,
-            elitism=True,
-            n_elites=1,
-            init_depth=6,
-            p_inflate=p_inflate, # Ablation Parameter
-            log_path=log_path,
-            seed=run_id,
-            verbose=1,
-            n_jobs=1,
-            reconstruct=True
-        )
-            
-        end_time = time.time()
-        train_time = end_time - start_time
-        
-        # Evaluation
-        if final_model:
-            preds = final_model.predict(X_test)
-            test_rmse = rmse(y_test, preds).item()
-            
-            # Classification Metrics
-            metrics = get_all_metrics(y_test, preds)
-            
-            # Tree Size
-            if hasattr(final_model, 'nodes_count'):
-                tree_size = final_model.nodes_count
-            elif hasattr(final_model, 'node_count'):
-                tree_size = final_model.node_count
+    for algorithm in algorithms:
+        ablation_values = p_inflate_values if algorithm == "SLIM" else [None]
+
+        for p_inflate in ablation_values:
+            if algorithm == "SLIM":
+                variant_name = f"SLIM_p_inflate_{p_inflate}"
+                log_path = os.path.join(output_dir, f"{variant_name}_{dataset_name}_run_{run_id}.csv")
             else:
-                 tree_size = 0
-            
-            result_row = {
-                "Variant": variant_name,
-                "P_Inflate": p_inflate,
-                "Run_ID": run_id,
-                "Train_Time": train_time,
-                "Test_RMSE": test_rmse,
-                "Tree_Size": tree_size,
-                **metrics
-            }
-            results.append(result_row)
-            print(f"[{variant_name}] Finished. Test RMSE: {test_rmse:.4f}, Accuracy: {metrics['accuracy']:.4f}")
+                variant_name = f"{algorithm}_baseline"
+                log_path = os.path.join(output_dir, f"{variant_name}_{dataset_name}_run_{run_id}.csv")
+
+            print(f"[{variant_name}] Running on {dataset_name} | Run: {run_id}")
+            start_time = time.time()
+
+            final_model = None
+            if algorithm == "GP":
+                final_model = gp(
+                    X_train=X_train, y_train=y_train,
+                    X_test=X_test, y_test=y_test,
+                    dataset_name=dataset_name,
+                    pop_size=pop_size,
+                    n_iter=n_iter,
+                    p_xo=0.8,
+                    elitism=True,
+                    n_elites=1,
+                    init_depth=6,
+                    log_path=log_path,
+                    seed=run_id,
+                    verbose=1,
+                    n_jobs=1
+                )
+            elif algorithm == "GSGP":
+                final_model = gsgp(
+                    X_train=X_train, y_train=y_train,
+                    X_test=X_test, y_test=y_test,
+                    dataset_name=dataset_name,
+                    pop_size=pop_size,
+                    n_iter=n_iter,
+                    p_xo=0.0,
+                    elitism=True,
+                    n_elites=1,
+                    init_depth=6,
+                    log_path=log_path,
+                    seed=run_id,
+                    verbose=1,
+                    n_jobs=1,
+                    reconstruct=True
+                )
+            elif algorithm == "SLIM":
+                final_model = slim(
+                    X_train=X_train, y_train=y_train,
+                    X_test=X_test, y_test=y_test,
+                    dataset_name=dataset_name,
+                    slim_version="SLIM+SIG2",
+                    pop_size=pop_size,
+                    n_iter=n_iter,
+                    p_xo=0.0,
+                    elitism=True,
+                    n_elites=1,
+                    init_depth=6,
+                    p_inflate=p_inflate,
+                    log_path=log_path,
+                    seed=run_id,
+                    verbose=1,
+                    n_jobs=1,
+                    reconstruct=True
+                )
+
+            end_time = time.time()
+            train_time = end_time - start_time
+
+            if final_model:
+                preds = final_model.predict(X_test)
+                test_rmse = rmse(y_test, preds).item()
+                metrics = get_all_metrics(y_test, preds)
+
+                if hasattr(final_model, 'nodes_count'):
+                    tree_size = final_model.nodes_count
+                elif hasattr(final_model, 'node_count'):
+                    tree_size = final_model.node_count
+                else:
+                    tree_size = 0
+
+                result_row = {
+                    "Algorithm": algorithm,
+                    "Variant": variant_name,
+                    "P_Inflate": p_inflate,
+                    "Run_ID": run_id,
+                    "Train_Time": train_time,
+                    "Test_RMSE": test_rmse,
+                    "Tree_Size": tree_size,
+                    **metrics
+                }
+                results.append(result_row)
+                print(f"[{variant_name}] Finished. Test RMSE: {test_rmse:.4f}, Accuracy: {metrics['accuracy']:.4f}")
             
     # Save results to a summary file
     summary_path = os.path.join(output_dir, f"summary_ablation_run_{run_id}.csv")
@@ -137,6 +178,14 @@ if __name__ == "__main__":
             
             # check algorithm initialization
             print("[INFO] Checking algorithm initialization (Ablation Variants)...")
+            gp(X_train=X[:10], y_train=y[:10], X_test=X[:10], y_test=y[:10],
+               dataset_name='darwin', n_iter=1, pop_size=5, verbose=0, n_jobs=1)
+            print("[OK] GP initialized")
+
+            gsgp(X_train=X[:10], y_train=y[:10], X_test=X[:10], y_test=y[:10],
+                 dataset_name='darwin', n_iter=1, pop_size=5, verbose=0, n_jobs=1, reconstruct=True)
+            print("[OK] GSGP initialized")
+
             p_inflate_values = [0.2, 0.5, 0.8]
             for p_inf in p_inflate_values:
                  slim(X_train=X[:10], y_train=y[:10], X_test=X[:10], y_test=y[:10], 

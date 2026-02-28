@@ -112,7 +112,8 @@ fitness_function_options = {
     "mse": mse,
     "mae": mae,
     "mae_int": mae_int,
-    "signed_errors": signed_errors
+    "signed_errors": signed_errors,
+    "binary_cross_entropy": binary_cross_entropy
 }
 
 initializer_options = {

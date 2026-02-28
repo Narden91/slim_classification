@@ -8,6 +8,7 @@ set -euo pipefail
 SLURM_SCRIPT="run_custom_experiments.slurm"
 TASK_LIST="config/experiments_task_list.csv"
 PYTHON_SCRIPT=""
+VENV_PYTHON="${VENV_PYTHON:-venv_slim/bin/python}"
 
 FROM_TASK=""
 TO_TASK=""
@@ -109,6 +110,7 @@ done
 [ -f "$PYTHON_SCRIPT" ] || fail "Script not found: $PYTHON_SCRIPT"
 [ -f "$SLURM_SCRIPT" ] || fail "SLURM script not found: $SLURM_SCRIPT"
 [ -f "$TASK_LIST" ] || fail "Task list not found: $TASK_LIST"
+[ -x "$VENV_PYTHON" ] || fail "Virtualenv python not executable: $VENV_PYTHON"
 
 if ! command -v sbatch >/dev/null 2>&1; then
   fail "sbatch not found in PATH; run on a login node"
@@ -162,6 +164,7 @@ TOTAL_BATCHES=$((FULL_BATCHES + (REMAINDER > 0 ? 1 : 0)))
 
 echo "Preflight OK"
 echo "Script:        $PYTHON_SCRIPT"
+echo "Python:        $VENV_PYTHON"
 echo "Task interval: $FROM_TASK-$TO_TASK"
 echo "Total tasks:   $SELECTED_COUNT"
 echo "Pop size:      $POP_SIZE"
@@ -179,7 +182,7 @@ for ((start=FROM_TASK; start<=TO_TASK; start+=50)); do
 
   echo "Submitting array block: ${start}-${end}"
   sbatch \
-    --export=ALL,TASK_FROM="$FROM_TASK",TASK_TO="$TO_TASK",TASK_LIST="$TASK_LIST",PYTHON_SCRIPT="$PYTHON_SCRIPT",POP_SIZE="$POP_SIZE",N_ITER="$N_ITER",SIGMOID_SCALE="$SIGMOID_SCALE",FITNESS_FUNCTION="$FITNESS_FUNCTION" \
+    --export=ALL,TASK_FROM="$FROM_TASK",TASK_TO="$TO_TASK",TASK_LIST="$TASK_LIST",PYTHON_SCRIPT="$PYTHON_SCRIPT",VENV_PYTHON="$VENV_PYTHON",POP_SIZE="$POP_SIZE",N_ITER="$N_ITER",SIGMOID_SCALE="$SIGMOID_SCALE",FITNESS_FUNCTION="$FITNESS_FUNCTION" \
     --array="${start}-${end}" \
     "$SLURM_SCRIPT"
 done

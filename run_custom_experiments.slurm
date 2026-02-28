@@ -28,11 +28,16 @@ module load python/3.11.7
 WORK_DIR="/pitagora_scratch/userexternal/enardone/slim_classification"
 cd "$WORK_DIR"
 
-if [ -d "venv_slim" ]; then
-    source venv_slim/bin/activate
-else
-    echo "WARNING: venv_slim not found, assuming python is in path"
+VENV_PYTHON="${VENV_PYTHON:-$WORK_DIR/venv_slim/bin/python}"
+
+if [ ! -x "$VENV_PYTHON" ]; then
+    echo "ERROR: venv python not found or not executable: $VENV_PYTHON"
+    exit 1
 fi
+
+source "$(dirname "$VENV_PYTHON")/activate"
+
+PYTHON_BIN="$VENV_PYTHON"
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export PYTHONUNBUFFERED=1
@@ -122,6 +127,7 @@ echo "SLIM Version:     $SLIM_VERSION"
 echo "Run Number:       $RUN_NUMBER"
 echo "Seed / Run ID:    $SEED"
 echo "Output Directory: $OUT_DIR"
+echo "Python Binary:    $PYTHON_BIN"
 echo "Population Size:  $POP_SIZE"
 echo "Generations:      $N_ITER"
 echo "Sigmoid Scale:    $SIGMOID_SCALE"
@@ -133,7 +139,7 @@ echo "Running custom python experiment..."
 START_TIME=$(date +%s)
 
 # Using standard custom experiment arguments
-python "$PYTHON_SCRIPT" \
+"$PYTHON_BIN" "$PYTHON_SCRIPT" \
     --run_id="$SEED" \
     --output_dir="$OUT_DIR" \
     --pop_size="$POP_SIZE" \
